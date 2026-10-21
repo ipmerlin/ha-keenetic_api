@@ -6,7 +6,7 @@ import logging
 import asyncio
 
 from homeassistant.helpers.update_coordinator import (
-    DataUpdateCoordinator, 
+    DataUpdateCoordinator,
     UpdateFailed,
 )
 from homeassistant.core import HomeAssistant
@@ -15,7 +15,7 @@ from homeassistant.const import CONF_HOST
 
 from .keenetic import Router
 from .const import (
-    DOMAIN, 
+    DOMAIN,
     FW_SANDBOX,
     COORD_FIREWARE,
     SCAN_INTERVAL_FIREWARE,
@@ -99,48 +99,52 @@ class KeeneticRouterFirmwareCoordinator(DataUpdateCoordinator):
         )
 
     async def _async_update_data(self):
-        repeat=0
-        while repeat < COUNT_REPEATED_REQUEST_FIREWARE:
-            repeat += 1
+        for _ in range(COUNT_REPEATED_REQUEST_FIREWARE):
             data_components_list = await self.router.components_list()
-            if not data_components_list.get('continued', False):
+            if not isinstance(data_components_list, dict) or not data_components_list.get('continued', False):
                 break
-            _LOGGER.debug(f"{self.router.mac} data_components_list not data {data_components_list}")
             await asyncio.sleep(TIMER_REPEATED_REQUEST_FIREWARE)
-        firmware = {}
-        firmware['new'] = data_components_list.get('firmware')
-        firmware['current'] = data_components_list.get('local')
-        firmware['sandbox'] = data_components_list.get('sandbox')
-        if (
-            self._version_firmware == {} 
-            or self._version_firmware.get("new").get("version") != firmware.get("new").get("version") 
-            or self._version_firmware.get("current").get("version") != firmware.get("current").get("version")
-        ):
-            repeat=0
-            while repeat < COUNT_REPEATED_REQUEST_FIREWARE:
-                repeat += 1
-                data_release_notes = await self.router.release_notes(firmware['new']['version'], FW_SANDBOX[firmware['sandbox']])
-                if not data_release_notes.get('continued', False):
-                    break
-                _LOGGER.debug(f"{self.router.mac} data_release_notes not data {data_release_notes}")
-                await asyncio.sleep(TIMER_REPEATED_REQUEST_FIREWARE)
-            firmware['release_notes'] = data_release_notes['webhelp']['ru'][0]['href']
-            firmware['channel'] = data_release_notes['webhelp']['ru'][0]['title']
-            self._version_firmware = firmware
+        if not isinstance(data_components_list, dict):
+            data_components_list = {}
+
+        firmware = {
+            'new': data_components_list.get('firmware'),
+            'current': data_components_list.get('local'),
+            'sandbox': data_components_list.get('sandbox')
+        }
+
+        # Безопасный парсинг release_notes (строка 127)
+        firmware['release_notes'] = None
+        firmware['channel'] = None
+
+        # Если есть данные о новой прошивке, пытаемся получить заметки
+        new_v = firmware['new'].get('version') if isinstance(firmware.get('new'), dict) else None
+        if new_v:
+            try:
+                for _ in range(COUNT_REPEATED_REQUEST_FIREWARE):
+                    data_notes = await self.router.release_notes(new_v, FW_SANDBOX.get(firmware.get('sandbox'), "main"))
+                    if not isinstance(data_notes, dict) or not data_notes.get('continued', False):
+                        break
+                    await asyncio.sleep(TIMER_REPEATED_REQUEST_FIREWARE)
+                if isinstance(data_notes, dict):
+                    webhelp = data_notes.get('webhelp')
+                    ru_notes = webhelp.get('ru', []) if isinstance(webhelp, dict) else []
+                    if isinstance(ru_notes, list) and ru_notes and isinstance(ru_notes[0], dict):
+                        firmware['release_notes'] = ru_notes[0].get('href')
+                        firmware['channel'] = ru_notes[0].get('title')
+            except Exception:
+                _LOGGER.debug("Could not fetch release notes")
+
+        self._version_firmware = firmware
         return self._version_firmware
+
 
     @property
     def device_info(self) -> DeviceInfo:
-        """Set device info."""
         vfw = self._version_firmware.get("current")
-        if vfw != None:
-            sw_version = vfw.get("title")
-        else:
-            sw_version = None
-        return DeviceInfo(
-            connections={(CONNECTION_NETWORK_MAC, self.router.mac)},
-            sw_version=sw_version,
-        )
+        sw_version = vfw.get("title") if isinstance(vfw, dict) else None
+        return DeviceInfo(connections={(CONNECTION_NETWORK_MAC, self.router.mac)}, sw_version=sw_version)
+
 
 
 class KeeneticRouterRcInterfaceCoordinator(DataUpdateCoordinator):

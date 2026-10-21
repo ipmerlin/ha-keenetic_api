@@ -4,6 +4,8 @@ import logging
 import voluptuous as vol
 from typing import Any
 import operator
+from aiohttp import ClientError
+from homeassistant.helpers import selector
 
 from homeassistant.config_entries import (
     ConfigEntry,
@@ -29,11 +31,12 @@ from homeassistant.const import (
 from . import get_api
 from .const import (
     DOMAIN,
+    CONF_ACCESS_TOKEN,
     COORD_FULL,
 )
-from .keenetic import Router
+from .keenetic import Router, RouterAuthError
 from .const import (
-    DEFAULT_SCAN_INTERVAL, 
+    DEFAULT_SCAN_INTERVAL,
     MIN_SCAN_INTERVAL,
     CONF_CLIENTS_SELECT_POLICY,
     CONF_CREATE_ALL_CLIENTS_POLICY,
@@ -50,7 +53,12 @@ _LOGGER = logging.getLogger(__name__)
 STEP_USER_DATA_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_USERNAME, default='admin'): cv.string,
-        vol.Required(CONF_PASSWORD, default=''): cv.string,
+        vol.Optional(CONF_PASSWORD, default=''): selector.TextSelector(
+            selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
+        ),
+        vol.Optional(CONF_ACCESS_TOKEN, default=''): selector.TextSelector(
+            selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
+        ),
         vol.Required(CONF_HOST, default='http://192.168.1.1'): str,
         vol.Required(CONF_PORT, default=80): int,
         vol.Required(CONF_SSL, default=False): bool,
@@ -79,7 +87,7 @@ class KeeneticOptionsFlowHandler(OptionsFlowWithReload):
 
 
     async def async_step_configure_router(
-        self, 
+        self,
         user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         if user_input is not None:
@@ -157,7 +165,7 @@ class KeeneticOptionsFlowHandler(OptionsFlowWithReload):
         )
 
     async def async_step_configure_other(
-        self, 
+        self,
         user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         if user_input is not None:
@@ -193,14 +201,20 @@ class KeeneticConfigFlow(ConfigFlow, domain=DOMAIN):
         title = ""
         if user_input is not None:
             try:
+                if not user_input.get(CONF_ACCESS_TOKEN, '').strip() and not user_input.get(CONF_PASSWORD):
+                    raise RouterAuthError("Credentials required")
                 router = await get_api(self.hass, user_input)
                 keen = await router.show_version()
 
                 title = f"{keen['vendor']} {keen['model']} {user_input['host']}"
 
-            except Exception as error:
-                _LOGGER.error('Keenetic Api Integration Exception - {}'.format(error))
-                errors['base'] = str(error)
+            except RouterAuthError:
+                errors['base'] = 'invalid_auth'
+            except (ClientError, TimeoutError):
+                errors['base'] = 'cannot_connect'
+            except Exception:
+                _LOGGER.error('Unexpected response while configuring Keenetic API')
+                errors['base'] = 'unknown'
             if title != "":
                 unique_id: str = f"{keen['vendor']} {keen['device']} {format_mac(router.mac)[-8:].replace(':', '')}"
                 await self.async_set_unique_id(unique_id)
@@ -210,6 +224,7 @@ class KeeneticConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_show_form(step_id="user", data_schema=STEP_USER_DATA_SCHEMA, errors=errors)
 
 
+
     @staticmethod
     @callback
     def async_get_options_flow(
@@ -217,3 +232,42 @@ class KeeneticConfigFlow(ConfigFlow, domain=DOMAIN):
     ) -> KeeneticOptionsFlowHandler:
         """Get the options flow for this handler."""
         return KeeneticOptionsFlowHandler()
+
+
+    async def async_step_reconfigure(self, user_input=None):
+        """Replace credentials without requiring the integration to be loaded."""
+        entry = self._get_reconfigure_entry()
+        errors = {}
+        if user_input is not None:
+            data = dict(entry.data)
+            token = user_input.get(CONF_ACCESS_TOKEN, '').strip()
+            if user_input.get('clear_access_token'):
+                data[CONF_ACCESS_TOKEN] = ''
+            elif token:
+                data[CONF_ACCESS_TOKEN] = token
+            try:
+                router = await get_api(self.hass, data)
+                keen = await router.show_version()
+            except RouterAuthError:
+                errors['base'] = 'invalid_auth'
+            except (ClientError, TimeoutError):
+                errors['base'] = 'cannot_connect'
+            except Exception:
+                _LOGGER.error('Unexpected response while reconfiguring Keenetic API')
+                errors['base'] = 'unknown'
+            else:
+                unique_id = f"{keen['vendor']} {keen['device']} {format_mac(router.mac)[-8:].replace(':', '')}"
+                await self.async_set_unique_id(unique_id)
+                self._abort_if_unique_id_mismatch()
+                return self.async_update_reload_and_abort(entry, data_updates=data)
+
+        return self.async_show_form(
+            step_id='reconfigure',
+            data_schema=vol.Schema({
+                vol.Optional(CONF_ACCESS_TOKEN, default=''): selector.TextSelector(
+                    selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
+                ),
+                vol.Optional('clear_access_token', default=False): bool,
+            }),
+            errors=errors,
+        )

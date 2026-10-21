@@ -1,0 +1,200 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "Устройство уже настроено!",
+      "reconfigure_successful": "Credentials updated. The integration has been reloaded.",
+      "unique_id_mismatch": "A different router responded. Settings were not changed."
+    },
+    "step": {
+      "user": {
+        "data": {
+          "host": "Хост",
+          "port": "Порт",
+          "username": "Логин",
+          "password": "Пароль",
+          "ssl": "SSL certificate",
+          "scan_interval": "Интервал скарирования (секунд).",
+          "access_token": "Access token"
+        },
+        "description": "Enter the router address and an access token (KeeneticOS 5.2), or username and password. A token takes precedence over password authentication."
+      },
+      "reconfigure": {
+        "title": "Change access token",
+        "description": "Enter a replacement token. Leave blank to keep the current token. Select Clear saved token to return to the stored username and password. Changes are saved only after a successful connection to the same router.",
+        "data": {
+          "access_token": "Access token",
+          "clear_access_token": "Clear saved token"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "The router rejected authentication. Check the token, its permissions, or username and password.",
+      "cannot_connect": "Unable to connect to the router.",
+      "unknown": "Unexpected router response. Check the Home Assistant log."
+    }
+  },
+  "options": {
+    "abort": {
+      "not_supported_settings": "Дополнительные настройки доступны \n только для типа router! \n У вас {hw_type}"
+    },
+    "step": {
+      "configure_router": {
+        "description": "Дополнительные настройки.",
+        "data": {
+          "scan_interval": "Интервал скарирования (секунд).",
+          "create_image_qr": "Создать Image QG WiFi.",
+          "create_entity_all_cliens_button_policy": "Создать Select политик для всех устройств.",
+          "cliens_select_policy": "Создать Select политик по выбранным устройствам.",
+          "create_device_tracker": "Создать Device tracker по всем устройствам.",
+          "create_select_device_tracker": "Создать Device tracker по выбранным устройствам.",
+          "create_entity_port_forwarding": "Создать Switch по всем port forwarding.",
+          "backup_type_file": "Файлы бекапа для скачивания при обновлении."
+        }
+      },
+      "configure_other": {
+        "description": "Дополнительные настройки.",
+        "data": {
+          "scan_interval": "Интервал скарирования (секунд)."
+        }
+      }
+    }
+  },
+  "services": {
+    "request_api": {
+      "name": "Execute request.",
+      "description": "Execute request.",
+      "fields": {
+        "device_id": {
+          "name": "Device:",
+          "description": "Device."
+        },
+        "entry_id": {
+          "name": "Integration:",
+          "description": "Integration."
+        },
+        "method": {
+          "name": "Method:",
+          "description": "Method."
+        },
+        "endpoint": {
+          "name": "Point API:",
+          "description": "Point API."
+        },
+        "data_json": {
+          "name": "Data:",
+          "description": "Data."
+        }
+      }
+    },
+    "backup_router": {
+      "name": "Create backup.",
+      "description": "Create backup.",
+      "fields": {
+        "entry_id": {
+          "name": "Integration:",
+          "description": "Integration."
+        },
+        "folder": {
+          "name": "The folder to save:",
+          "description": "The folder to save."
+        },
+        "type": {
+          "name": "Type backup:",
+          "description": "Type backup."
+        }
+      }
+    }
+  },
+  "entity": {
+    "select": {
+      "client_policy": {
+        "name": "Client Policy",
+        "state": {
+          "default": "Default",
+          "not_internet": "Not internet"
+        }
+      }
+    },
+    "sensor": {
+      "cpuload": {
+        "name": "CPU load"
+      },
+      "memory": {
+        "name": "Memory used"
+      },
+      "uptime": {
+        "name": "Start up time"
+      },
+      "temperature_2_4g": {
+        "name": "Temperature 2.4g chip"
+      },
+      "temperature_5g": {
+        "name": "Temperature 5g chip"
+      },
+      "clients_wifi": {
+        "name": "Clients WiFi"
+      },
+      "wan_ip_adress": {
+        "name": "WAN IP adress"
+      },
+      "rxbytes": {
+        "name": "{name} Downloaded"
+      },
+      "txbytes": {
+        "name": "{name} Uploaded"
+      },
+      "timestamp": {
+        "name": "{name} Start up time"
+      },
+      "rxspeed": {
+        "name": "{name} Downlink speed"
+      },
+      "txspeed": {
+        "name": "{name} Uplink speed"
+      }
+    },
+    "image": {
+      "qrwifi": {
+        "name": "{name}"
+      }
+    },
+    "button": {
+      "reboot": {
+        "name": "Reboot"
+      }
+    },
+    "binary_sensor": {
+      "connected_to_router": {
+        "name": "Connection to Keenetic {name}"
+      },
+      "connected_to_interface": {
+        "name": "{name} Connection"
+      },
+      "connected_to_media": {
+        "name": "Status {name}"
+      },
+      "interface_pingcheck": {
+        "name": "{name} PingCheck"
+      }
+    },
+    "switch": {
+      "interface": {
+        "name": "{name_interface}"
+      },
+      "port_forwarding": {
+        "name": "PortFrw {pfrw_name}"
+      },
+      "web_configurator_access": {
+        "name": "Web Configurator Access"
+      },
+      "power_usb": {
+        "name": "USB power port {number}"
+      }
+    },
+    "number": {
+      "clients_idle_timeout_wifi": {
+        "name": "Clients Idle Timeout {name_interface}"
+      }
+    }
+  }
+}

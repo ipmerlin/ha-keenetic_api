@@ -1,8 +1,8 @@
 {
-    "name": "Keenetic API",
-    "render_readme": true,
-    "country": "RU",
-    "homeassistant": "2024.1.0",
-    "zip_release": true,
-    "filename": "keenetic_api.zip"
+  "name": "Keenetic API",
+  "render_readme": true,
+  "country": "RU",
+  "homeassistant": "2026.10.0",
+  "zip_release": true,
+  "filename": "keenetic_api.zip"
 }

@@ -2,12 +2,15 @@
     "domain": "keenetic_api",
     "name": "Keenetic API",
     "codeowners": [
-        "@malinovsku"
+        "@ipmerlin"
     ],
     "config_flow": true,
-    "documentation": "https://github.com/malinovsku/ha-keenetic_api",
+    "documentation": "https://github.com/ipmerlin/ha-keenetic_api",
     "iot_class": "local_polling",
-    "issue_tracker": "https://github.com/malinovsku/ha-keenetic_api/issues",
-    "requirements": ["pyqrcode==1.2.1", "pypng==0.20220715.0"],
-    "version": "0.11"
+    "issue_tracker": "https://github.com/ipmerlin/ha-keenetic_api/issues",
+    "requirements": [
+        "pyqrcode==1.2.1",
+        "pypng==0.20220715.0"
+    ],
+    "version": "1.2.5b1"
 }

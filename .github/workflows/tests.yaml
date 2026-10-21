@@ -1,0 +1,17 @@
+name: Token and firmware regression tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run network-free unit tests
+        run: python3 -B -m unittest discover -s tests -v

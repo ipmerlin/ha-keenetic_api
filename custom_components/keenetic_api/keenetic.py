@@ -10,6 +10,7 @@ import logging
 import aiofiles.os
 from pathlib import Path
 from dataclasses import dataclass
+from urllib.parse import urlsplit
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -109,6 +110,10 @@ LIST_INTERFACES_PUBLIC = [
     "Ethernet",
 ]
 
+class RouterAuthError(Exception):
+    """Router rejected authentication without disclosing credentials."""
+
+
 class Router:
     def __init__(
         self,
@@ -118,12 +123,16 @@ class Router:
         host="192.168.1.1",
         port: int = 80,
         ssl: bool | None = False,
+        access_token: str = "",
         ):
         self._session = session
         self.host = host
         self.url_router = f'{host}:{port}'
         self._username = username
         self._password = password
+        self._access_token = access_token.strip()
+        if any(ord(char) < 33 or ord(char) > 126 for char in self._access_token):
+            raise RouterAuthError("Access token contains invalid characters")
         self.request_interface = {}
 
         self._mac = ""
@@ -133,6 +142,7 @@ class Router:
         self._hw_id = ""
         self._name_device = ""
         self._usb = []
+
 
     @property
     def mac(self):
@@ -196,23 +206,32 @@ class Router:
 
 
     async def async_download_file(self, download_url, folder):
+        if self._access_token and urlsplit(download_url).netloc != urlsplit(self.url_router).netloc:
+            raise ValueError("Token downloads must use the configured router")
         try:
             await aiofiles.os.makedirs(folder, exist_ok=True)
-            async with self._session.get(download_url, timeout=180) as response:
+            async with self._session.get(download_url, timeout=180, headers=self._token_headers(), allow_redirects=False) as response:
+                    if response.status in (401, 403):
+                        raise RouterAuthError("Router rejected download authentication")
                     if response.status != 200:
                         raise Exception('Got non-200 response!')
                     async with aiofiles.open(f"{folder}/{self._mac.replace(':', '')}-{response.content_disposition.filename}", 'wb') as file:
                         async for data, _ in response.content.iter_chunks():
                             await file.write(data)
         except asyncio.TimeoutError as err:
-            raise Exception("TimeoutError") from err
+            raise TimeoutError("Router download timed out") from err
         return True
 
-    async def reguest_api(self, method: str, endpoint: str, json: Mapping[str, Any] | None = None, headers: str | None = None) -> tuple[aiohttp.ClientResponse]:
+
+    async def reguest_api(self, method: str, endpoint: str, json: Mapping[str, Any] | None = None, headers: Mapping[str, str] | None = None):
         url = self.url_router + endpoint
+        request_headers = dict(headers or {})
+        request_headers.update(self._token_headers())
         try:
-            _LOGGER.debug(f'{self._mac} request - {endpoint} - {json}')
-            async with self._session.request(method=method, url=url, json=json, headers=headers) as res:
+            _LOGGER.debug('%s request - %s', self._mac, endpoint)
+            async with self._session.request(method=method, url=url, json=json, headers=request_headers, allow_redirects=False) as res:
+                if self._access_token and res.status in (401, 403):
+                    raise RouterAuthError("Router rejected access token or its permissions")
                 if res.status == 200 and res.content_type == 'application/json':
                     result = await res.json()
                 elif res.status == 200 and res.content_type == 'application/javascript':
@@ -222,26 +241,37 @@ class Router:
                     result = res
                 _LOGGER.debug(f'{self._mac} status - {endpoint} {res.status}')
         except asyncio.TimeoutError as err:
-            raise Exception("TimeoutError") from err
+            raise TimeoutError("Router request timed out") from err
         return result
 
 
 
+
     async def api(self, method: str, endpoint: str, json: Mapping[str, Any] | None = {}):
-        resp = await self.auth()
+        if not self._access_token:
+            await self.auth()
         return await self.reguest_api(method, endpoint, json)
 
+
     async def auth(self):
+        if self._access_token:
+            version = await self.reguest_api("get", "/rci/show/version")
+            if not isinstance(version, dict) or not version.get("model"):
+                raise RouterAuthError("Token authentication did not return router version data")
+            return True
         response = await self.reguest_api("get", "/auth")
         if response.status == 401:
+            if not response.headers.get('X-NDM-Realm') or not response.headers.get('X-NDM-Challenge'):
+                raise RouterAuthError("Legacy password authentication unavailable; configure an access token")
             password = f"{self._username}:{response.headers['X-NDM-Realm']}:{self._password}"
             password = md5(password.encode("utf-8"))
             password = response.headers["X-NDM-Challenge"] + password.hexdigest()
             password = sha256(password.encode("utf-8")).hexdigest()
             response = await self.reguest_api("post", "/auth", json={"login": self._username, "password": password})
-            if response.status == 401:
-                raise Exception(response)
+        if response.status != 200:
+            raise RouterAuthError("Router rejected password authentication")
         return response.status == 200
+
 
     async def components_list(self):
         return await self.api("post", "/rci/components/list")
@@ -503,3 +533,6 @@ class Router:
             stat_interface,
             show_pingcheck,
             )
+
+    def _token_headers(self):
+        return {"X-NDMA-TKN": self._access_token} if self._access_token else {}

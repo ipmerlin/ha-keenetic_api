@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 
 from homeassistant.components.device_tracker import SourceType
-from homeassistant.components.device_tracker.config_entry import ScannerEntity
+from homeassistant.components.device_tracker import ScannerEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC, DeviceInfo, format_mac
@@ -39,8 +39,8 @@ async def async_setup_entry(
             if mac in entry.options.get(CONF_SELECT_CREATE_DT, []) or entry.options.get(CONF_CREATE_DT, False):
                 if mac not in tracked:
                     tracked[mac] = KeeneticScannerEntity(
-                        coordinator, 
-                        mac, 
+                        coordinator,
+                        mac,
                         device.name or device.hostname or device.mac,
                     )
                     device_trackers.append(tracked[mac])
@@ -59,8 +59,8 @@ class KeeneticScannerEntity(CoordinatorEntity[KeeneticRouterCoordinator], Scanne
     })
 
     def __init__(
-        self, 
-        coordinator: KeeneticRouterCoordinator, 
+        self,
+        coordinator: KeeneticRouterCoordinator,
         mac: str,
         hostname: str,
     ) -> None:

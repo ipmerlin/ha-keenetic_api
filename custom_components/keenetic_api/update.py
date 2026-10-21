@@ -19,8 +19,8 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.exceptions import HomeAssistantError
 
 from .const import (
-    DOMAIN, 
-    COORD_FIREWARE, 
+    DOMAIN,
+    COORD_FIREWARE,
     SCAN_INTERVAL_FIREWARE,
     DEFAULT_BACKUP_TYPE_FILE,
     CONF_BACKUP_TYPE_FILE,
@@ -31,8 +31,8 @@ _LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
-    hass: HomeAssistant, 
-    entry: ConfigEntry, 
+    hass: HomeAssistant,
+    entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback
 ) -> None:
     coordinator = hass.data[DOMAIN][entry.entry_id][COORD_FIREWARE]
@@ -58,8 +58,8 @@ class KeeneticUpdateEntity(CoordinatorEntity[KeeneticRouterFirmwareCoordinator],
         self._in_progress_old_version: str | None = None
         self._backup_type_file = backup_type_file
         self._attr_supported_features = (
-            UpdateEntityFeature.INSTALL | 
-            UpdateEntityFeature.PROGRESS 
+            UpdateEntityFeature.INSTALL |
+            UpdateEntityFeature.PROGRESS
         )
         if len(self._backup_type_file) > 0:
             self._attr_supported_features |= UpdateEntityFeature.BACKUP
@@ -67,27 +67,37 @@ class KeeneticUpdateEntity(CoordinatorEntity[KeeneticRouterFirmwareCoordinator],
     @property
     def title(self) -> str | None:
         """Title channel."""
-        return self.coordinator.data.get('channel')
+        return (self.coordinator.data or {}).get('channel')
+
 
     @property
     def installed_version(self) -> str | None:
         """Version currently in use."""
-        return self.coordinator.data.get("current").get("title")
+        current = (self.coordinator.data or {}).get("current")
+        return current.get("title") if isinstance(current, dict) else None
+
 
     @property
     def latest_version(self) -> str | None:
         """Latest version available for install."""
-        return self.coordinator.data.get("new").get("title")
+        latest = (self.coordinator.data or {}).get("new")
+        return latest.get("title") if isinstance(latest, dict) else None
+
 
     @property
     def in_progress(self) -> bool:
         """Update installation in progress."""
-        return self._in_progress_old_version == self.installed_version
+        return (
+            self._in_progress_old_version is not None
+            and self._in_progress_old_version == self.installed_version
+        )
+
 
     @property
     def release_url(self) -> str | None:
         """Release summary."""
-        return self.coordinator.data.get("release_notes")
+        return (self.coordinator.data or {}).get("release_notes")
+
 
     async def async_install(self, version: str | None, backup: bool, **kwargs: Any) -> None:
         """Install the latest firmware version."""

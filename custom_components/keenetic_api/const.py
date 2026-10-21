@@ -3,6 +3,7 @@
 from typing import Final
 
 DOMAIN: Final = "keenetic_api"
+CONF_ACCESS_TOKEN: Final = "access_token"
 
 MIN_SCAN_INTERVAL: Final = 1
 DEFAULT_SCAN_INTERVAL: Final = 30

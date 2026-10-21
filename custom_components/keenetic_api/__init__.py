@@ -25,14 +25,15 @@ from homeassistant.helpers import device_registry as dr
 
 from .services import async_setup_services, async_unload_services
 from .coordinator import (
-    KeeneticRouterCoordinator, 
-    KeeneticRouterFirmwareCoordinator, 
+    KeeneticRouterCoordinator,
+    KeeneticRouterFirmwareCoordinator,
     KeeneticRouterRcInterfaceCoordinator
 )
 from .keenetic import Router
 from .const import (
-    DOMAIN, 
-    DEFAULT_SCAN_INTERVAL, 
+    DOMAIN,
+    CONF_ACCESS_TOKEN,
+    DEFAULT_SCAN_INTERVAL,
     MIN_SCAN_INTERVAL,
     COORD_FULL,
     COORD_FIREWARE,
@@ -116,12 +117,17 @@ async def get_api(hass: HomeAssistant, data: dict[str, Any]) -> Router:
     session = aiohttp_client.async_create_clientsession(hass, data[CONF_SSL], **kwargs)
     client = Router(
         session = session,
-        username=data[CONF_USERNAME],
-        password=data[CONF_PASSWORD],
+        username=data.get(CONF_USERNAME, "admin"),
+        password=data.get(CONF_PASSWORD, ""),
+        access_token=data.get(CONF_ACCESS_TOKEN, ""),
         host=data[CONF_HOST],
         port=data[CONF_PORT],
     )
-    await client.async_setup_obj()
+    try:
+        await client.async_setup_obj()
+    except Exception:
+        await session.close()
+        raise
     return client
 
 
@@ -132,22 +138,22 @@ def remove_entities_or_devices(hass, entry) -> None:
     for entity in entity_conf:
         delete_ent = False
         if (
-            entity.domain == "device_tracker" 
-            and not entry.options.get(CONF_CREATE_DT, False) 
-            and hass.states.get(entity.entity_id).attributes.get("mac") not in entry.options.get(CONF_SELECT_CREATE_DT, []) 
+            entity.domain == "device_tracker"
+            and not entry.options.get(CONF_CREATE_DT, False)
+            and hass.states.get(entity.entity_id).attributes.get("mac") not in entry.options.get(CONF_SELECT_CREATE_DT, [])
         ):
             delete_ent = True
         elif (
-            entity.domain == "switch" 
+            entity.domain == "switch"
             and entity.translation_key == "port_forwarding"
-            and not entry.options.get(CONF_CREATE_PORT_FRW, False) 
+            and not entry.options.get(CONF_CREATE_PORT_FRW, False)
         ):
             delete_ent = True
         elif (
-            entity.domain == "select" 
+            entity.domain == "select"
             and entity.translation_key == "client_policy"
-            and not entry.options.get(CONF_CREATE_ALL_CLIENTS_POLICY, False) 
-            and hass.states.get(entity.entity_id).attributes.get("mac") not in entry.options.get(CONF_CLIENTS_SELECT_POLICY, []) 
+            and not entry.options.get(CONF_CREATE_ALL_CLIENTS_POLICY, False)
+            and hass.states.get(entity.entity_id).attributes.get("mac") not in entry.options.get(CONF_CLIENTS_SELECT_POLICY, [])
         ):
             delete_ent = True
         if delete_ent:
