@@ -25,6 +25,7 @@ from homeassistant.helpers import device_registry as dr
 
 from .modem import duplicate_modem_entities
 from .services import async_setup_services, async_unload_services
+from .sms_coordinator import KeeneticSmsCoordinator, SMS_COORDINATOR
 from .coordinator import (
     KeeneticRouterCoordinator,
     KeeneticRouterFirmwareCoordinator,
@@ -86,6 +87,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         COORD_RC_INTERFACE: coordinator_rc_interface
     }
 
+    sms = KeeneticSmsCoordinator(hass, entry, coordinator_full)
+    hass.data[DOMAIN][entry.entry_id][SMS_COORDINATOR] = sms
+    entry.async_on_unload(sms.close)
+    await sms.async_refresh()
+    # Poll even before a supported modem/sensor is discovered.
+    entry.async_on_unload(sms.async_add_listener(lambda: None))
+
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     await async_setup_services(hass)
@@ -103,7 +111,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id)
-        async_unload_services(hass)
+        if not hass.data[DOMAIN]:
+            async_unload_services(hass)
     return unload_ok
 
 

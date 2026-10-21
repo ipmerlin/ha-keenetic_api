@@ -31,6 +31,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import StateType
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from .sms_sensor import async_setup_sms_sensors
 from .coordinator import KeeneticRouterCoordinator
 from .keenetic import KeeneticFullData
 from .modem import discover_modem_metrics, is_modem, modem_attributes, modem_value, modem_signal_icon, modem_network_icon, SIGNAL_METRICS
@@ -232,6 +233,7 @@ async def async_setup_entry(
                 for interface_id, metric in new_metrics
             ])
 
+    await async_setup_sms_sensors(hass, entry, async_add_entities)
     discover_modems()
     entry.async_on_unload(coordinator.async_add_listener(discover_modems))
 

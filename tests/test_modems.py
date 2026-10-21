@@ -112,7 +112,7 @@ class ModemEntityTest(unittest.IsolatedAsyncioTestCase):
               'discover_modem_metrics':modem.discover_modem_metrics, 'modem_value':modem.modem_value,
               'modem_attributes':modem.modem_attributes, 'is_modem':modem.is_modem,
               'callback':lambda fn:fn, 'SENSOR_TYPES':(), 'SENSORS_STAT_INTERFACE':(),
-              'MODEM_SENSORS':descriptions, 'DOMAIN':'keenetic_api', 'COORD_FULL':'full'}
+              'async_setup_sms_sensors':AsyncMock(), 'MODEM_SENSORS':descriptions, 'DOMAIN':'keenetic_api', 'COORD_FULL':'full'}
         ns = load_definitions('sensor.py', {'async_setup_entry','KeeneticModemSensor'}, ns)
         entities=[]
         await ns['async_setup_entry'](SimpleNamespace(data={'keenetic_api':{'entry':{'full':coordinator}}}),

@@ -54,13 +54,15 @@
           "create_entity_all_cliens_button_policy": "Создать объекты Select политик для всех устройств.",
           "cliens_select_policy": "Создать объекты Select политик по выбранным:",
           "create_device_tracker": "Создать объекты device_tracker по всем устройствам.",
-          "create_entity_port_forwarding": "Создать объекты Switch по всем port forwarding."
+          "create_entity_port_forwarding": "Создать объекты Switch по всем port forwarding.",
+          "sms_default_target": "Номер получателя SMS по умолчанию"
         }
       },
       "configure_other": {
         "description": "Дополнительные настройки.",
         "data": {
-          "scan_interval": "Интервал скарирования (секунд)."
+          "scan_interval": "Интервал скарирования (секунд).",
+          "sms_default_target": "Номер получателя SMS по умолчанию"
         }
       }
     }
@@ -107,6 +109,39 @@
         "type": {
           "name": "Тип backup:",
           "description": "Тип backup."
+        }
+      }
+    },
+    "list_sms": {
+      "name": "Список SMS",
+      "description": "Получить SMS без отметки прочтения. Текст неполных сообщений скрыт.",
+      "fields": {
+        "entry_id": {
+          "name": "Запись интеграции"
+        },
+        "device_id": {
+          "name": "Устройство"
+        },
+        "interface": {
+          "name": "Интерфейс модема"
+        }
+      }
+    },
+    "mark_sms_read": {
+      "name": "Отметить SMS прочитанным",
+      "description": "Явно пометить выбранное сообщение прочитанным.",
+      "fields": {
+        "entry_id": {
+          "name": "Запись интеграции"
+        },
+        "device_id": {
+          "name": "Устройство"
+        },
+        "interface": {
+          "name": "Интерфейс модема"
+        },
+        "sms_id": {
+          "name": "Идентификатор SMS"
         }
       }
     }
@@ -199,6 +234,9 @@
       },
       "modem_txspeed": {
         "name": "Модем {name} Исходящая скорость"
+      },
+      "unread_sms": {
+        "name": "Модем {name} Непрочитанные SMS"
       }
     },
     "binary_sensor": {

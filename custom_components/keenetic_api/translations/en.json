@@ -56,13 +56,15 @@
           "create_device_tracker": "Создать Device tracker по всем устройствам.",
           "create_select_device_tracker": "Создать Device tracker по выбранным устройствам.",
           "create_entity_port_forwarding": "Создать Switch по всем port forwarding.",
-          "backup_type_file": "Файлы бекапа для скачивания при обновлении."
+          "backup_type_file": "Файлы бекапа для скачивания при обновлении.",
+          "sms_default_target": "Default SMS recipient phone number"
         }
       },
       "configure_other": {
         "description": "Дополнительные настройки.",
         "data": {
-          "scan_interval": "Интервал скарирования (секунд)."
+          "scan_interval": "Интервал скарирования (секунд).",
+          "sms_default_target": "Default SMS recipient phone number"
         }
       }
     }
@@ -109,6 +111,39 @@
         "type": {
           "name": "Type backup:",
           "description": "Type backup."
+        }
+      }
+    },
+    "list_sms": {
+      "name": "List SMS",
+      "description": "List SMS without marking read. Partial message text is omitted.",
+      "fields": {
+        "entry_id": {
+          "name": "entry_id"
+        },
+        "device_id": {
+          "name": "device_id"
+        },
+        "interface": {
+          "name": "interface"
+        }
+      }
+    },
+    "mark_sms_read": {
+      "name": "Mark SMS read",
+      "description": "Explicitly mark one SMS as read.",
+      "fields": {
+        "entry_id": {
+          "name": "entry_id"
+        },
+        "device_id": {
+          "name": "device_id"
+        },
+        "interface": {
+          "name": "interface"
+        },
+        "sms_id": {
+          "name": "sms_id"
         }
       }
     }
@@ -201,6 +236,9 @@
       },
       "modem_txspeed": {
         "name": "Modem {name} Upload speed"
+      },
+      "unread_sms": {
+        "name": "Modem {name} Unread SMS"
       }
     },
     "image": {

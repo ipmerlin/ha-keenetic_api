@@ -13,6 +13,8 @@ from homeassistant.core import (
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.util.json import json_loads
 
+from .sms_coordinator import SMS_COORDINATOR
+
 from .const import (
     DOMAIN,
     CROUTER,
@@ -23,6 +25,8 @@ _LOGGER = logging.getLogger(__name__)
 SUPPORTED_SERVICES = [
     "request_api",
     "backup_router",
+    "list_sms",
+    "mark_sms_read",
 ]
 
 
@@ -31,6 +35,8 @@ async def async_setup_services(hass: HomeAssistant) -> None:
     services = {
         "request_api": request_api,
         "backup_router": backup_router,
+        "list_sms": list_sms,
+        "mark_sms_read": mark_sms_read,
     }
 
     async def async_call_keenetic_service(service_call: ServiceCall) -> None:
@@ -84,3 +90,18 @@ async def request_api(hass: HomeAssistant, entry_id: str, data: Mapping[str, Any
 async def backup_router(hass: HomeAssistant, entry_id: str, data: Mapping[str, Any]):
     response = await _router_for_entry(hass, entry_id).async_backup(data["folder"], data["type"])
     return {"response": "success"}
+
+
+def _sms_for_entry(hass, entry_id):
+    coordinator = hass.data.get(DOMAIN, {}).get(entry_id, {}).get(SMS_COORDINATOR)
+    if coordinator is None or coordinator.closed:
+        raise ServiceValidationError("Keenetic SMS is not loaded")
+    return coordinator
+
+
+async def list_sms(hass, entry_id, data):
+    return await _sms_for_entry(hass, entry_id).list_messages(data.get("interface"))
+
+
+async def mark_sms_read(hass, entry_id, data):
+    return await _sms_for_entry(hass, entry_id).mark_read(data.get("sms_id"), data.get("interface"))

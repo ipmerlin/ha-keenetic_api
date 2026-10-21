@@ -117,6 +117,10 @@ class KeeneticOptionsFlowHandler(OptionsFlowWithReload):
             data_schema=vol.Schema(
                 {
                     vol.Optional(
+                        "sms_default_target",
+                        default=self.config_entry.options.get("sms_default_target", ""),
+                    ): vol.All(cv.string, vol.Match(r"^(?:\+?[0-9]{3,15})?$")),
+                    vol.Optional(
                         CONF_SCAN_INTERVAL,
                         default=self.config_entry.options.get(
                             CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
@@ -175,6 +179,10 @@ class KeeneticOptionsFlowHandler(OptionsFlowWithReload):
             step_id="configure_other",
             data_schema=vol.Schema(
                 {
+                    vol.Optional(
+                        "sms_default_target",
+                        default=self.config_entry.options.get("sms_default_target", ""),
+                    ): vol.All(cv.string, vol.Match(r"^(?:\+?[0-9]{3,15})?$")),
                     vol.Optional(
                         CONF_SCAN_INTERVAL,
                         default=self.config_entry.options.get(
