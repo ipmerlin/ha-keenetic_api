@@ -35,12 +35,16 @@ class NDW4HTTPTest(unittest.IsolatedAsyncioTestCase):
         self.missing_data_phase = None
         self.malformed_params = False
         self.final_status = 200
+        self.auth_endpoint = '/auth'
+        self.cookie_path = '/'
+        self.string_costs = False
         key = hash_secret_raw(self.password.encode(), self.salt, 2, 8, 1, 64, Type.ID)
         self.client_key = hmac.digest(key, b'NDW4 Interactive Client Key', 'sha3_512')
         self.stored_key = hashlib.sha3_512(self.client_key).digest()
         self.server_key = hmac.digest(key, b'NDW4 Interactive Server Key', 'sha3_512')
         app = web.Application()
         app.router.add_route('*', '/auth', self.handle_auth)
+        app.router.add_route('*', '/auth/ndw4', self.handle_auth)
         app.router.add_get('/rci/show/version', self.handle_version)
         self.runner = web.AppRunner(app)
         await self.runner.setup()
@@ -59,8 +63,10 @@ class NDW4HTTPTest(unittest.IsolatedAsyncioTestCase):
         return web.Response(status=401, headers=headers)
 
     def message(self):
+        iterations = '02' if self.string_costs else '2'
+        memory = '0008' if self.string_costs else '8'
         return (
-            f'login1=admin,nonce1={self.client_nonce};iter2=2,memcost2=8,'
+            f'login1=admin,nonce1={self.client_nonce};iter2={iterations},memcost2={memory},'
             f'nonce2={self.nonce},salt2={self.salt_text};login3=admin,nonce3={self.nonce}'
         )
 
@@ -82,13 +88,14 @@ class NDW4HTTPTest(unittest.IsolatedAsyncioTestCase):
             self.phases.append('GET')
             headers = CIMultiDict([
                 ('WWW-Authenticate', 'x-ndw2-interactive endpoint="/auth"'),
-                ('WWW-Authenticate', 'X-NDW4-Interactive endpoint="/auth"'),
+                ('WWW-Authenticate', f'X-NDW4-Interactive endpoint="{self.auth_endpoint}"'),
                 ('X-NDM-Realm', 'old-realm'), ('X-NDM-Challenge', 'old-challenge'),
             ])
             response = web.Response(status=401, headers=headers)
-            response.set_cookie('sid', 'challenge')
+            response.set_cookie('sid', 'challenge', path=self.cookie_path)
             return response
         self.assertEqual(request.cookies.get('sid'), 'challenge')
+        self.assertEqual(request.path, self.auth_endpoint)
         body = await request.json()
         self.assertNotIn('password', body)
         if 'signature-proof' in body:
@@ -112,7 +119,8 @@ class NDW4HTTPTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(base64.b64decode(self.client_nonce)), 16)
         return self.data({
             'salt': self.salt_text, 'nonce': self.nonce,
-            'iter': 2, 'memcost': 999999999 if self.malformed_params else 8,
+            'iter': '02' if self.string_costs else 2,
+            'memcost': 999999999 if self.malformed_params else ('0008' if self.string_costs else 8),
         }, 1)
 
     async def test_success_uses_three_phases_cookie_and_new_protocol(self):
@@ -132,7 +140,7 @@ class NDW4HTTPTest(unittest.IsolatedAsyncioTestCase):
         self.router._username = 'unknown'
         with self.assertRaises(client.RouterAuthError) as error:
             await self.router.auth()
-        self.assertEqual(error.exception.code, 'invalid_auth')
+        self.assertEqual(error.exception.code, 'ndw4_login_rejected')
         self.assertEqual(self.phases, ['GET', 'P1'])
 
     async def test_bad_server_signature_stops_exchange(self):
@@ -161,3 +169,19 @@ class NDW4HTTPTest(unittest.IsolatedAsyncioTestCase):
             await self.router.auth()
         self.assertEqual(error.exception.code, 'invalid_auth')
         self.assertEqual(self.phases, ['GET', 'P1', 'P2', 'P3'])
+
+    async def test_advertised_endpoint_with_standard_session_cookie(self):
+        self.auth_endpoint = '/auth/ndw4'
+        self.assertEqual(await self.router.show_version(), {'model': 'Viva'})
+        self.assertEqual(self.phases, ['GET', 'P1', 'P2', 'P3'])
+
+    async def test_string_cost_values_are_signed_without_normalization(self):
+        self.string_costs = True
+        self.assertTrue(await self.router.auth())
+
+    async def test_foreign_endpoint_rejected_before_post(self):
+        self.auth_endpoint = 'https://foreign.invalid/auth'
+        with self.assertRaises(client.RouterAuthError) as error:
+            await self.router.auth()
+        self.assertEqual(error.exception.code, 'auth_protocol_error')
+        self.assertEqual(self.phases, ['GET'])

@@ -11,6 +11,8 @@ import hashlib
 import hmac
 import json
 import secrets
+import re
+from urllib.request import parse_http_list
 
 
 class NDW4ProtocolError(Exception):
@@ -19,6 +21,32 @@ class NDW4ProtocolError(Exception):
 
 class NDW4CredentialsError(Exception):
     """Credentials rejected, or the server proof did not match."""
+
+
+class NDW4LoginRejected(NDW4CredentialsError):
+    """The initial login request was refused, before password verification."""
+
+
+def get_endpoint(headers):
+    """Read the advertised NDW4 path without permitting a different origin."""
+    values = headers.getall('WWW-Authenticate', []) if hasattr(headers, 'getall') else [headers.get('WWW-Authenticate', '')]
+    for value in values:
+        parts = parse_http_list(value)
+        for index, part in enumerate(parts):
+            match = re.match(r'^x-ndw4-interactive(?=\s|$)', part.strip(), re.IGNORECASE)
+            if not match:
+                continue
+            params = [part.strip()[match.end():]]
+            for following in parts[index + 1:]:
+                if re.match(r'^[A-Za-z][A-Za-z0-9_-]*\s+', following):
+                    break
+                params.append(following)
+            endpoint_match = re.search(r'\bendpoint\s*=\s*"([^"]*)"', ','.join(params))
+            endpoint = endpoint_match.group(1) if endpoint_match else ''
+            if not re.fullmatch(r'/(?!/)[A-Za-z0-9._~/-]*', endpoint):
+                raise NDW4ProtocolError('NDW4 offer has no safe authentication endpoint')
+            return endpoint
+    return None
 
 
 def _hmac(key, message):
@@ -47,7 +75,7 @@ def _data(response, phase):
     encoded = response.headers.get('X-NDM-Data', '')
     if not encoded:
         if phase == 1:
-            raise NDW4CredentialsError('NDW4 login rejected')
+            raise NDW4LoginRejected('NDW4 initial login rejected before password verification')
         raise NDW4ProtocolError(f'NDW4 phase {phase}: missing exchange data')
     try:
         if len(encoded) > 16384:
@@ -68,12 +96,16 @@ async def authenticate(request, login, password):
         salt_text = params['salt']
         salt = base64.b64decode(salt_text, validate=True)
         nonce = params['nonce']
-        iterations = params['iter']
-        memory = params['memcost']
+        iterations_raw = params['iter']
+        memory_raw = params['memcost']
+        if any(isinstance(value, bool) or not re.fullmatch(r'[0-9]+', str(value)) for value in (iterations_raw, memory_raw)):
+            raise ValueError()
+        iterations = int(iterations_raw)
+        memory = int(memory_raw)
         if (
             len(salt) != 16 or not isinstance(nonce, str) or not 1 <= len(nonce) <= 1024
-            or type(iterations) is not int or not 1 <= iterations <= 10
-            or type(memory) is not int or not 8 <= memory <= 262144
+            or not 1 <= iterations <= 64
+            or not 8 <= memory <= 262144
         ):
             raise ValueError()
     except (KeyError, ValueError, TypeError, binascii.Error):
@@ -84,7 +116,7 @@ async def authenticate(request, login, password):
     )
     message = (
         f'login1={login},nonce1={client_nonce};'
-        f'iter2={iterations},memcost2={memory},nonce2={nonce},salt2={salt_text};'
+        f'iter2={iterations_raw},memcost2={memory_raw},nonce2={nonce},salt2={salt_text};'
         f'login3={login},nonce3={nonce}'
     )
     proof = base64.b64encode(_xor(client_key, _hmac(stored_key, message))).decode('ascii')

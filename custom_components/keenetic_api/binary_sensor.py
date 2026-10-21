@@ -12,7 +12,7 @@ from homeassistant.components.binary_sensor import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -22,6 +22,7 @@ from .const import (
 )
 from .coordinator import KeeneticRouterCoordinator
 from .keenetic import KeeneticFullData
+from .modem import discover_modem_metrics, is_modem, modem_value
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -102,6 +103,24 @@ async def async_setup_entry(
 
     async_add_entities(binary_sensors, False)
 
+    seen_modems = set()
+
+    @callback
+    def discover_modems():
+        new_metrics = discover_modem_metrics(
+            coordinator.data.show_interface, coordinator.data.stat_interface, seen_modems,
+            ("connected", "roaming"),
+        )
+        if new_metrics:
+            async_add_entities([
+                KeeneticModemBinarySensor(coordinator, interface_id, metric)
+                for interface_id, metric in new_metrics
+            ])
+
+    discover_modems()
+    entry.async_on_unload(coordinator.async_add_listener(discover_modems))
+
+
 
 class KeeneticBinarySensorEntity(CoordinatorEntity[KeeneticRouterCoordinator], BinarySensorEntity):
 
@@ -141,3 +160,29 @@ class KeeneticBinarySensorEntity(CoordinatorEntity[KeeneticRouterCoordinator], B
             return self.entity_description.attributes_fn(self.coordinator, self._obj_id)
         else:
             return None
+
+
+class KeeneticModemBinarySensor(CoordinatorEntity[KeeneticRouterCoordinator], BinarySensorEntity):
+    """Connectivity/roaming of a modem, including one attached to an extender."""
+
+    _attr_has_entity_name = True
+
+    def __init__(self, coordinator, interface_id, metric):
+        super().__init__(coordinator)
+        self.interface_id = interface_id
+        self._metric = metric
+        self._attr_unique_id = f"{coordinator.unique_id}_modem_{metric}_{interface_id}"
+        self._attr_translation_key = f"modem_{metric}"
+        self._attr_translation_placeholders = {"name": interface_id}
+        self._attr_device_info = coordinator.device_info
+        self._attr_device_class = BinarySensorDeviceClass.CONNECTIVITY if metric == "connected" else None
+        self._attr_icon = "mdi:signal" if metric == "roaming" else None
+        self._attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    @property
+    def available(self):
+        return super().available and is_modem(self.coordinator.data.show_interface.get(self.interface_id))
+
+    @property
+    def is_on(self):
+        return modem_value(self.coordinator.data.show_interface.get(self.interface_id, {}), {}, self._metric)

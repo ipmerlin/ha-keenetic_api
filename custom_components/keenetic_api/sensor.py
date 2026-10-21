@@ -13,7 +13,9 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
 )
 from homeassistant.const import (
-    PERCENTAGE, 
+    PERCENTAGE,
+    SIGNAL_STRENGTH_DECIBELS,
+    SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
     UnitOfInformation, 
     EntityCategory, 
     UnitOfDataRate,
@@ -31,6 +33,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .coordinator import KeeneticRouterCoordinator
 from .keenetic import KeeneticFullData
+from .modem import discover_modem_metrics, is_modem, modem_attributes, modem_value
 from .const import (
     DOMAIN,
     COORD_FULL,
@@ -155,6 +158,39 @@ SENSORS_STAT_INTERFACE: tuple[KeeneticRouterSensorEntityDescription, ...] = (
     ),
 )
 
+MODEM_SENSORS = (
+    SensorEntityDescription(key="modem_info", icon="mdi:router-wireless"),
+    SensorEntityDescription(key="modem_operator", icon="mdi:sim"),
+    SensorEntityDescription(key="modem_network", icon="mdi:network-strength-4"),
+    SensorEntityDescription(key="modem_sim", icon="mdi:sim", entity_category=EntityCategory.DIAGNOSTIC),
+    SensorEntityDescription(key="modem_band", icon="mdi:radio-tower", entity_category=EntityCategory.DIAGNOSTIC),
+    *(SensorEntityDescription(
+        key=f"modem_{metric}", device_class=SensorDeviceClass.SIGNAL_STRENGTH,
+        native_unit_of_measurement=SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
+        state_class=SensorStateClass.MEASUREMENT,
+    ) for metric in ("rssi", "rsrp")),
+    *(SensorEntityDescription(
+        key=f"modem_{metric}", native_unit_of_measurement=SIGNAL_STRENGTH_DECIBELS,
+        state_class=SensorStateClass.MEASUREMENT, icon="mdi:signal",
+    ) for metric in ("rsrq", "sinr")),
+    SensorEntityDescription(
+        key="modem_temperature", device_class=SensorDeviceClass.TEMPERATURE,
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        state_class=SensorStateClass.MEASUREMENT, entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    *(SensorEntityDescription(
+        key=f"modem_{metric}", device_class=SensorDeviceClass.DATA_SIZE,
+        native_unit_of_measurement=UnitOfInformation.BYTES,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+    ) for metric in ("rxbytes", "txbytes")),
+    *(SensorEntityDescription(
+        key=f"modem_{metric}", device_class=SensorDeviceClass.DATA_RATE,
+        native_unit_of_measurement=UnitOfDataRate.MEGABITS_PER_SECOND,
+        state_class=SensorStateClass.MEASUREMENT,
+    ) for metric in ("rxspeed", "txspeed")),
+)
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry, 
@@ -180,6 +216,23 @@ async def async_setup_entry(
                     _LOGGER.debug(f'async_setup_entry sensor SENSORS_STAT_INTERFACE {description} err - {err}')
 
     async_add_entities(sensors, False)
+
+    seen_modems = set()
+    descriptions = {description.key.removeprefix("modem_"): description for description in MODEM_SENSORS}
+
+    @callback
+    def discover_modems():
+        new_metrics = discover_modem_metrics(
+            coordinator.data.show_interface, coordinator.data.stat_interface, seen_modems, descriptions,
+        )
+        if new_metrics:
+            async_add_entities([
+                KeeneticModemSensor(coordinator, descriptions[metric], interface_id)
+                for interface_id, metric in new_metrics
+            ])
+
+    discover_modems()
+    entry.async_on_unload(coordinator.async_add_listener(discover_modems))
 
 class KeeneticRouterSensor(CoordinatorEntity[KeeneticRouterCoordinator], SensorEntity):
     _attr_has_entity_name = True
@@ -213,3 +266,36 @@ class KeeneticRouterSensor(CoordinatorEntity[KeeneticRouterCoordinator], SensorE
             return self.entity_description.attributes_fn(self.coordinator.data)
         else:
             return None
+
+
+class KeeneticModemSensor(CoordinatorEntity[KeeneticRouterCoordinator], SensorEntity):
+    """One read-only metric of a local or Wi-Fi-system cellular modem."""
+
+    _attr_has_entity_name = True
+
+    def __init__(self, coordinator, description, interface_id):
+        super().__init__(coordinator)
+        self.interface_id = interface_id
+        self.entity_description = description
+        self._metric = description.key.removeprefix("modem_")
+        self._attr_unique_id = f"{coordinator.unique_id}_{description.key}_{interface_id}"
+        self._attr_translation_key = description.key
+        self._attr_translation_placeholders = {"name": interface_id}
+        self._attr_device_info = coordinator.device_info
+
+    @property
+    def available(self):
+        return super().available and is_modem(self.coordinator.data.show_interface.get(self.interface_id))
+
+    @property
+    def native_value(self):
+        return modem_value(
+            self.coordinator.data.show_interface.get(self.interface_id, {}),
+            self.coordinator.data.stat_interface.get(self.interface_id, {}), self._metric,
+        )
+
+    @property
+    def extra_state_attributes(self):
+        if self._metric == "info":
+            return modem_attributes(self.coordinator.data.show_interface.get(self.interface_id, {}), self.interface_id)
+        return None

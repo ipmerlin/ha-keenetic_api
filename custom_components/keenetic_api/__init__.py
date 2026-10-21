@@ -126,7 +126,7 @@ async def get_api(hass: HomeAssistant, data: dict[str, Any]) -> Router:
         )
         await client.async_setup_obj()
     except Exception:
-        await session.close()
+        session.detach()
         raise
     return client
 

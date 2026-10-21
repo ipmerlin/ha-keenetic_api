@@ -11,9 +11,9 @@ import aiofiles.os
 from pathlib import Path
 from dataclasses import dataclass
 from urllib.parse import urlsplit
-import re
 
-from .ndw4 import authenticate as authenticate_ndw4, NDW4CredentialsError, NDW4ProtocolError
+from .modem import modem_interfaces
+from .ndw4 import authenticate as authenticate_ndw4, get_endpoint, NDW4CredentialsError, NDW4ProtocolError, NDW4LoginRejected
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -278,13 +278,20 @@ class Router:
             return True
         response = await self.reguest_api("get", "/auth", raw_response=True)
         if response.status == 401:
-            headers = response.headers
-            offers = headers.getall('WWW-Authenticate', []) if hasattr(headers, 'getall') else [headers.get('WWW-Authenticate', '')]
-            if any(re.search(r'(?:^|,)\s*x-ndw4-interactive(?:\s|,|$)', value, re.IGNORECASE) for value in offers):
+            try:
+                endpoint = get_endpoint(response.headers)
+            except NDW4ProtocolError as err:
+                raise RouterAuthError(str(err), 'auth_protocol_error') from None
+            if endpoint:
                 async def request_phase(body):
-                    return await self.reguest_api('post', '/auth', json=body, raw_response=True)
+                    return await self.reguest_api('post', endpoint, json=body, raw_response=True)
                 try:
                     return await authenticate_ndw4(request_phase, self._username, self._password)
+                except NDW4LoginRejected:
+                    raise RouterAuthError(
+                        f'NDW4 phase 1: HTTP 401 without exchange data; endpoint={endpoint}; cookie_present={bool(getattr(self._session, "cookie_jar", ()))}; password was not checked',
+                        'ndw4_login_rejected',
+                    ) from None
                 except NDW4CredentialsError as err:
                     raise RouterAuthError(str(err)) from None
                 except NDW4ProtocolError as err:
@@ -456,8 +463,16 @@ class Router:
         data_show_stat_interface = await self.api("post", "/rci/", json=data_json_send)
         # _LOGGER.debug(f"{self._mac} data_show_stat_interface {data_show_stat_interface} ")
         stat_interface={}
-        for idx, row in enumerate(stat_interfaces):
-            stat_interface[row] = data_show_stat_interface[idx]['show']['interface']['stat']
+        if not isinstance(data_show_stat_interface, list):
+            return stat_interface
+        for row, response in zip(stat_interfaces, data_show_stat_interface):
+            if not isinstance(response, dict):
+                continue
+            show = response.get('show', {})
+            interface = show.get('interface', {}) if isinstance(show, dict) else {}
+            stat = interface.get('stat') if isinstance(interface, dict) else None
+            if isinstance(stat, dict):
+                stat_interface[row] = stat
         return stat_interface
 
     async def custom_request(self):
@@ -545,7 +560,10 @@ class Router:
         else:
             show_media = full_info_other[5]['show'].get('media', {}) if self.usb else {}
 
-        stat_interface = await self.show_stat_interface()
+        # Extenders can own a modem too. Keep these read-only statistics separate
+        # from request_interface, which also exposes interface controls.
+        stat_interfaces = dict.fromkeys((*self.request_interface, *modem_interfaces(show_interface)))
+        stat_interface = await self.show_stat_interface(stat_interfaces)
 
         return KeeneticFullData(
             show_system,

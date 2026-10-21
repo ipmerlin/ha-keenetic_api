@@ -37,7 +37,8 @@
       "token_forbidden": "HTTP 403: token access denied. Check permissions or clear the saved token and use username/password.",
       "token_invalid_format": "The token contains invalid characters.",
       "token_response_invalid": "The token probe did not return router version data. For network access, clear the saved token and use username/password.",
-      "auth_protocol_error": "The x-ndw4 exchange failed due to unexpected router data or parameters. See the log; this does not necessarily mean an incorrect password."
+      "auth_protocol_error": "The x-ndw4 exchange failed due to unexpected router data or parameters. See the log; this does not necessarily mean an incorrect password.",
+      "ndw4_login_rejected": "The router rejected NDW4 phase 1 without exchange data, before checking the password. Check the username and any HTTP login lockout for the HA address; see the log for details."
     }
   },
   "options": {
@@ -158,6 +159,48 @@
       },
       "txspeed": {
         "name": "{name} Uplink speed"
+      },
+      "modem_info": {
+        "name": "Modem {name}"
+      },
+      "modem_operator": {
+        "name": "Modem {name} Operator"
+      },
+      "modem_network": {
+        "name": "Modem {name} Network type"
+      },
+      "modem_sim": {
+        "name": "Modem {name} SIM"
+      },
+      "modem_band": {
+        "name": "Modem {name} Band"
+      },
+      "modem_rssi": {
+        "name": "Modem {name} RSSI"
+      },
+      "modem_rsrp": {
+        "name": "Modem {name} RSRP"
+      },
+      "modem_rsrq": {
+        "name": "Modem {name} RSRQ"
+      },
+      "modem_sinr": {
+        "name": "Modem {name} SINR"
+      },
+      "modem_temperature": {
+        "name": "Modem {name} Temperature"
+      },
+      "modem_rxbytes": {
+        "name": "Modem {name} Downloaded"
+      },
+      "modem_txbytes": {
+        "name": "Modem {name} Uploaded"
+      },
+      "modem_rxspeed": {
+        "name": "Modem {name} Download speed"
+      },
+      "modem_txspeed": {
+        "name": "Modem {name} Upload speed"
       }
     },
     "image": {
@@ -182,6 +225,12 @@
       },
       "interface_pingcheck": {
         "name": "{name} PingCheck"
+      },
+      "modem_connected": {
+        "name": "Modem {name} Connection"
+      },
+      "modem_roaming": {
+        "name": "Modem {name} Roaming"
       }
     },
     "switch": {

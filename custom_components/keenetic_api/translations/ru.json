@@ -37,7 +37,8 @@
       "token_forbidden": "HTTP 403: доступ по токену запрещён. Проверьте права либо удалите сохранённый токен и используйте логин и пароль.",
       "token_invalid_format": "В токене есть недопустимые символы.",
       "token_response_invalid": "При проверке токена роутер не вернул данные версии. Для подключения по сети используйте логин и пароль, удалив сохранённый токен.",
-      "auth_protocol_error": "Обмен x-ndw4 не завершён: неожиданный ответ или параметры роутера. Подробности есть в журнале; это не обязательно неверный пароль."
+      "auth_protocol_error": "Обмен x-ndw4 не завершён: неожиданный ответ или параметры роутера. Подробности есть в журнале; это не обязательно неверный пароль.",
+      "ndw4_login_rejected": "Роутер отклонил первый этап x-ndw4 без данных обмена. Пароль ещё не проверялся. Проверьте логин и возможную блокировку HTTP-входа с адреса HA; подробности есть в журнале."
     }
   },
   "options": {
@@ -156,6 +157,48 @@
       },
       "txspeed": {
         "name": "{name} Исходящая скорость"
+      },
+      "modem_info": {
+        "name": "Модем {name}"
+      },
+      "modem_operator": {
+        "name": "Модем {name} Оператор"
+      },
+      "modem_network": {
+        "name": "Модем {name} Тип сети"
+      },
+      "modem_sim": {
+        "name": "Модем {name} SIM"
+      },
+      "modem_band": {
+        "name": "Модем {name} Диапазон"
+      },
+      "modem_rssi": {
+        "name": "Модем {name} RSSI"
+      },
+      "modem_rsrp": {
+        "name": "Модем {name} RSRP"
+      },
+      "modem_rsrq": {
+        "name": "Модем {name} RSRQ"
+      },
+      "modem_sinr": {
+        "name": "Модем {name} SINR"
+      },
+      "modem_temperature": {
+        "name": "Модем {name} Температура"
+      },
+      "modem_rxbytes": {
+        "name": "Модем {name} Загружено"
+      },
+      "modem_txbytes": {
+        "name": "Модем {name} Выгружено"
+      },
+      "modem_rxspeed": {
+        "name": "Модем {name} Входящая скорость"
+      },
+      "modem_txspeed": {
+        "name": "Модем {name} Исходящая скорость"
       }
     },
     "binary_sensor": {
@@ -170,6 +213,12 @@
       },
       "interface_pingcheck": {
         "name": "{name} PingCheck"
+      },
+      "modem_connected": {
+        "name": "Модем {name} Подключение"
+      },
+      "modem_roaming": {
+        "name": "Модем {name} Роуминг"
       }
     },
     "image": {

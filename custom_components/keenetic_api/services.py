@@ -34,6 +34,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
     }
 
     async def async_call_keenetic_service(service_call: ServiceCall) -> None:
+        current_entry_id = None
         if entry_id := service_call.data.get('entry_id', False):
             current_entry_id = entry_id
         elif device_id := service_call.data.get('device_id', False):
@@ -48,6 +49,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                     break
         else:
             raise ServiceValidationError("Нет параметра entry_id или device_id.", DOMAIN)
+        _router_for_entry(hass, current_entry_id)
         return await services[service_call.service](hass, current_entry_id, service_call.data)
 
     for service in SUPPORTED_SERVICES:
@@ -65,13 +67,20 @@ def async_unload_services(hass: HomeAssistant) -> None:
         hass.services.async_remove(DOMAIN, service)
 
 
+def _router_for_entry(hass, entry_id):
+    router = hass.data.get(DOMAIN, {}).get(entry_id, {}).get(CROUTER)
+    if router is None:
+        raise ServiceValidationError("Keenetic не загружен. Проверьте подключение и авторизацию роутера.")
+    return router
+
+
 async def request_api(hass: HomeAssistant, entry_id: str, data: Mapping[str, Any]):
     data_json = json_loads(data_json) if isinstance(data_json := data.get("data_json", []), str) else data_json
-    response = await hass.data[DOMAIN][entry_id][CROUTER].api(data["method"], data["endpoint"], data_json)
-    _LOGGER.debug(f'Services request_api endpoint - {data["endpoint"]}. data_json - {data_json}. response - {response}')
+    response = await _router_for_entry(hass, entry_id).api(data["method"], data["endpoint"], data_json)
+    _LOGGER.debug('Service request_api completed')
     return {"response": response}
 
 
 async def backup_router(hass: HomeAssistant, entry_id: str, data: Mapping[str, Any]):
-    response = await hass.data[DOMAIN][entry_id][CROUTER].async_backup(data["folder"], data["type"])
+    response = await _router_for_entry(hass, entry_id).async_backup(data["folder"], data["type"])
     return {"response": "success"}
