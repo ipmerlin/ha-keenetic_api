@@ -245,5 +245,46 @@ class ModemDeduplicationTest(unittest.TestCase):
         self.assertEqual(objects['sensor.original'].name,'user customized')
 
 
+class ModemIconTest(unittest.TestCase):
+    def test_signal_thresholds_include_boundary_values(self):
+        cases={
+            'rssi':[(-69,'signal-cellular-3'),(-70,'signal-cellular-2'),(-84,'signal-cellular-2'),
+                    (-85,'signal-cellular-1'),(-99,'signal-cellular-1'),(-100,'signal-cellular-outline')],
+            'rsrp':[(-84,'antenna'),(-85,'antenna'),(-99,'antenna'),(-100,'signal-cellular-outline')],
+            'sinr':[(14,'speedometer'),(13,'speedometer-medium'),(10,'speedometer-medium'),
+                    (9,'speedometer-medium'),(1,'speedometer-medium'),(0,'speedometer-slow'),(-2,'speedometer-slow')],
+            'rsrq':[(-9,'quality-high'),(-10,'quality-medium'),(-14,'quality-medium'),(-15,'quality-low')],
+        }
+        for metric,points in cases.items():
+            for value,icon in points:
+                self.assertEqual(modem.modem_signal_icon(metric,value),'mdi:'+icon,(metric,value))
+
+    def test_missing_values_are_not_shown_as_a_valid_zero_reading(self):
+        for metric in modem.SIGNAL_METRICS:
+            for value in (None,'',True,'nan','unknown'):
+                self.assertEqual(modem.modem_signal_icon(metric,value),'mdi:signal-off')
+        self.assertEqual(modem.modem_signal_icon('sinr','0'),'mdi:speedometer-slow')
+
+    def test_entity_icon_tracks_new_value_without_changing_identity(self):
+        ns=load_definitions('sensor.py',{'KeeneticModemSensor'},{
+            'CoordinatorEntity':CoordinatorBase,'KeeneticRouterCoordinator':object,'SensorEntity':SensorBase,
+            'modem_value':modem.modem_value,'is_modem':modem.is_modem,
+            'modem_signal_icon':modem.modem_signal_icon,'SIGNAL_METRICS':modem.SIGNAL_METRICS,
+        })
+        data=SimpleNamespace(show_interface={'UsbQmi0':dict(MODEM)},stat_interface={})
+        coordinator=SimpleNamespace(data=data,unique_id='test_full',device_info={},last_update_success=True)
+        entity=ns['KeeneticModemSensor'](coordinator,SimpleNamespace(key='modem_rssi',icon=None),'UsbQmi0')
+        unique_id=entity._attr_unique_id
+        self.assertEqual(entity.icon,'mdi:signal-cellular-3')
+        data.show_interface['UsbQmi0']['rssi']='-90'
+        self.assertEqual(entity.icon,'mdi:signal-cellular-1')
+        self.assertEqual(entity._attr_unique_id,unique_id)
+        coordinator.last_update_success=False
+        self.assertEqual(entity.icon,'mdi:signal-off')
+        coordinator.last_update_success=True
+        data.show_interface={}
+        self.assertEqual(entity.icon,'mdi:signal-off')
+
+
 if __name__=='__main__':
     unittest.main()

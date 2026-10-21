@@ -33,7 +33,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .coordinator import KeeneticRouterCoordinator
 from .keenetic import KeeneticFullData
-from .modem import discover_modem_metrics, is_modem, modem_attributes, modem_value
+from .modem import discover_modem_metrics, is_modem, modem_attributes, modem_value, modem_signal_icon, SIGNAL_METRICS
 from .const import (
     DOMAIN,
     COORD_FULL,
@@ -160,7 +160,7 @@ SENSORS_STAT_INTERFACE: tuple[KeeneticRouterSensorEntityDescription, ...] = (
 
 MODEM_SENSORS = (
     SensorEntityDescription(key="modem_info", icon="mdi:router-wireless"),
-    SensorEntityDescription(key="modem_operator", icon="mdi:sim"),
+    SensorEntityDescription(key="modem_operator", icon="mdi:radio-tower"),
     SensorEntityDescription(key="modem_network", icon="mdi:network-strength-4"),
     SensorEntityDescription(key="modem_sim", icon="mdi:sim", entity_category=EntityCategory.DIAGNOSTIC),
     SensorEntityDescription(key="modem_band", icon="mdi:radio-tower", entity_category=EntityCategory.DIAGNOSTIC),
@@ -294,6 +294,12 @@ class KeeneticModemSensor(CoordinatorEntity[KeeneticRouterCoordinator], SensorEn
             self.coordinator.data.show_interface.get(self.interface_id, {}),
             self.coordinator.data.stat_interface.get(self.interface_id, {}), self._metric,
         )
+
+    @property
+    def icon(self):
+        if self._metric in SIGNAL_METRICS:
+            return modem_signal_icon(self._metric, self.native_value if self.available else None)
+        return self.entity_description.icon
 
     @property
     def extra_state_attributes(self):

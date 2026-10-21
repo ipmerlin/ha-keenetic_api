@@ -130,3 +130,34 @@ def duplicate_modem_entities(unique_id, interfaces, legacy_interfaces):
             old_key = "connected_to_interface" if metric == "connected" else metric
             yield (domain, f"{unique_id}_{old_key}_{interface_id}",
                    f"{unique_id}_modem_{metric}_{interface_id}")
+
+
+SIGNAL_METRICS = {"rssi", "rsrp", "sinr", "rsrq"}
+
+
+def modem_signal_icon(metric, value):
+    """Signal-dependent icons using the user's thresholds and valid MDI names."""
+    if metric not in SIGNAL_METRICS:
+        return None
+    value = number(value)
+    if value is None:
+        return "mdi:signal-off"
+    if metric == "rssi":
+        if value > -70:
+            return "mdi:signal-cellular-3"
+        if value > -85:
+            return "mdi:signal-cellular-2"
+        if value > -100:
+            return "mdi:signal-cellular-1"
+        return "mdi:signal-cellular-outline"
+    if metric == "rsrp":
+        # The template uses antenna for both good and moderate RSRP.
+        return "mdi:antenna" if value > -100 else "mdi:signal-cellular-outline"
+    if metric == "sinr":
+        # Higher SINR is better. The template's two middle bands share an icon.
+        if value > 13:
+            return "mdi:speedometer"
+        return "mdi:speedometer-medium" if value > 0 else "mdi:speedometer-slow"
+    if value > -10:
+        return "mdi:quality-high"
+    return "mdi:quality-medium" if value > -15 else "mdi:quality-low"
