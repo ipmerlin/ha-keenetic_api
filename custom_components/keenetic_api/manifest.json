@@ -5,6 +5,9 @@
         "@ipmerlin"
     ],
     "config_flow": true,
+    "dependencies": [
+        "notify"
+    ],
     "documentation": "https://github.com/ipmerlin/ha-keenetic_api",
     "iot_class": "local_polling",
     "issue_tracker": "https://github.com/ipmerlin/ha-keenetic_api/issues",
@@ -13,8 +16,5 @@
         "pypng==0.20220715.0",
         "argon2-cffi>=25.1.0"
     ],
-    "version": "1.4b1",
-    "dependencies": [
-        "notify"
-    ]
+    "version": "1.4b1"
 }
