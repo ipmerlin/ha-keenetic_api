@@ -248,12 +248,14 @@ class ModemDeduplicationTest(unittest.TestCase):
 class ModemIconTest(unittest.TestCase):
     def test_signal_thresholds_include_boundary_values(self):
         cases={
-            'rssi':[(-69,'signal-cellular-3'),(-70,'signal-cellular-2'),(-84,'signal-cellular-2'),
-                    (-85,'signal-cellular-1'),(-99,'signal-cellular-1'),(-100,'signal-cellular-outline')],
-            'rsrp':[(-84,'antenna'),(-85,'antenna'),(-99,'antenna'),(-100,'signal-cellular-outline')],
-            'sinr':[(14,'speedometer'),(13,'speedometer-medium'),(10,'speedometer-medium'),
-                    (9,'speedometer-medium'),(1,'speedometer-medium'),(0,'speedometer-slow'),(-2,'speedometer-slow')],
-            'rsrq':[(-9,'quality-high'),(-10,'quality-medium'),(-14,'quality-medium'),(-15,'quality-low')],
+            'rssi':[(-64,'signal'),(-65,'signal-cellular-3'),(-69,'signal-cellular-3'),
+                    (-70,'signal-cellular-2'),(-85,'signal-cellular-1'),(-100,'signal-cellular-outline')],
+            'rsrp':[(-84,'signal'),(-85,'signal-cellular-3'),(-95,'signal-cellular-2'),
+                    (-105,'signal-cellular-1'),(-115,'signal-cellular-outline')],
+            'sinr':[(21,'signal'),(20,'signal-cellular-3'),(13,'signal-cellular-2'),
+                    (9,'signal-cellular-1'),(0,'signal-cellular-outline'),(-2,'signal-cellular-outline')],
+            'rsrq':[(-9,'signal'),(-10,'signal-cellular-3'),(-15,'signal-cellular-2'),
+                    (-20,'signal-cellular-1'),(-25,'signal-cellular-outline')],
         }
         for metric,points in cases.items():
             for value,icon in points:
@@ -263,7 +265,7 @@ class ModemIconTest(unittest.TestCase):
         for metric in modem.SIGNAL_METRICS:
             for value in (None,'',True,'nan','unknown'):
                 self.assertEqual(modem.modem_signal_icon(metric,value),'mdi:signal-off')
-        self.assertEqual(modem.modem_signal_icon('sinr','0'),'mdi:speedometer-slow')
+        self.assertEqual(modem.modem_signal_icon('sinr','0'),'mdi:signal-cellular-outline')
 
     def test_entity_icon_tracks_new_value_without_changing_identity(self):
         ns=load_definitions('sensor.py',{'KeeneticModemSensor'},{

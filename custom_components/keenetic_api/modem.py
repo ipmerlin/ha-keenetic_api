@@ -136,28 +136,19 @@ SIGNAL_METRICS = {"rssi", "rsrp", "sinr", "rsrq"}
 
 
 def modem_signal_icon(metric, value):
-    """Signal-dependent icons using the user's thresholds and valid MDI names."""
+    """Show a consistent zero-to-four-bar quality scale for each metric."""
     if metric not in SIGNAL_METRICS:
         return None
     value = number(value)
     if value is None:
         return "mdi:signal-off"
-    if metric == "rssi":
-        if value > -70:
-            return "mdi:signal-cellular-3"
-        if value > -85:
-            return "mdi:signal-cellular-2"
-        if value > -100:
-            return "mdi:signal-cellular-1"
-        return "mdi:signal-cellular-outline"
-    if metric == "rsrp":
-        # The template uses antenna for both good and moderate RSRP.
-        return "mdi:antenna" if value > -100 else "mdi:signal-cellular-outline"
-    if metric == "sinr":
-        # Higher SINR is better. The template's two middle bands share an icon.
-        if value > 13:
-            return "mdi:speedometer"
-        return "mdi:speedometer-medium" if value > 0 else "mdi:speedometer-slow"
-    if value > -10:
-        return "mdi:quality-high"
-    return "mdi:quality-medium" if value > -15 else "mdi:quality-low"
+    thresholds = {
+        "rssi": (-65, -70, -85, -100),
+        "rsrp": (-85, -95, -105, -115),
+        "rsrq": (-10, -15, -20, -25),
+        "sinr": (20, 13, 9, 0),
+    }
+    for bars, threshold in zip((4, 3, 2, 1), thresholds[metric]):
+        if value > threshold:
+            return "mdi:signal" if bars == 4 else f"mdi:signal-cellular-{bars}"
+    return "mdi:signal-cellular-outline"
