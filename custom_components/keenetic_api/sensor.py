@@ -33,7 +33,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .coordinator import KeeneticRouterCoordinator
 from .keenetic import KeeneticFullData
-from .modem import discover_modem_metrics, is_modem, modem_attributes, modem_value, modem_signal_icon, SIGNAL_METRICS
+from .modem import discover_modem_metrics, is_modem, modem_attributes, modem_value, modem_signal_icon, modem_network_icon, SIGNAL_METRICS
 from .const import (
     DOMAIN,
     COORD_FULL,
@@ -299,6 +299,8 @@ class KeeneticModemSensor(CoordinatorEntity[KeeneticRouterCoordinator], SensorEn
     def icon(self):
         if self._metric in SIGNAL_METRICS:
             return modem_signal_icon(self._metric, self.native_value if self.available else None)
+        if self._metric == "network":
+            return modem_network_icon(self.native_value if self.available else None)
         return self.entity_description.icon
 
     @property

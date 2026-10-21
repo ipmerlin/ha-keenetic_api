@@ -152,3 +152,22 @@ def modem_signal_icon(metric, value):
         if value > threshold:
             return "mdi:signal" if bars == 4 else f"mdi:signal-cellular-{bars}"
     return "mdi:signal-cellular-outline"
+
+
+def modem_network_icon(value):
+    """Use the reported cellular technology without altering its sensor value."""
+    value = text(value)
+    if value is None:
+        return "mdi:signal-off"
+    network = value.upper().replace(" ", "").replace("-", "").replace("_", "")
+    icons = {
+        "2G": "2g", "GSM": "2g", "GPRS": "2g", "EDGE": "2g",
+        "3G": "3g", "UMTS": "3g", "WCDMA": "3g", "HSDPA": "3g", "HSUPA": "3g",
+        "HSPA": "hspa", "HSPA+": "hspa-plus", "HSPAP": "hspa-plus",
+        "4G": "4g", "4G+": "4g", "LTE": "4g", "LTEA": "4g", "LTE+": "4g",
+        "LTEADVANCED": "4g",
+        "5G": "5g", "5GNR": "5g", "NR": "5g", "NR5G": "5g",
+        "5GSA": "5g", "5GNSA": "5g", "NR5GSA": "5g", "NR5GNSA": "5g",
+    }
+    suffix = icons.get(network)
+    return f"mdi:signal-{suffix}" if suffix else "mdi:radio-tower"

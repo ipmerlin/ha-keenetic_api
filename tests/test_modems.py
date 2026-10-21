@@ -261,6 +261,39 @@ class ModemIconTest(unittest.TestCase):
             for value,icon in points:
                 self.assertEqual(modem.modem_signal_icon(metric,value),'mdi:'+icon,(metric,value))
 
+    def test_network_icons_follow_reported_technology(self):
+        for suffix, values in {
+            '2g': ['2G', 'gsm', 'GPRS', 'EDGE'],
+            '3g': ['3G', 'UMTS', 'WCDMA', 'HSDPA', 'HSUPA'],
+            'hspa': ['HSPA'], 'hspa-plus': ['HSPA+', 'HSPAP'],
+            '4g': ['4G', '4G+', 'lte', 'LTE-A', 'LTE Advanced'],
+            '5g': ['5G', '5G NR', 'NR', 'NR5G', '5G SA', '5G NSA', 'NR5G-SA', 'NR5G-NSA'],
+        }.items():
+            for value in values:
+                self.assertEqual(modem.modem_network_icon(value),'mdi:signal-'+suffix,value)
+        for value in (None, '', 'unknown', True):
+            self.assertEqual(modem.modem_network_icon(value),'mdi:signal-off')
+        for value in ('Auto', 'LTE/NR', '6G'):
+            self.assertEqual(modem.modem_network_icon(value),'mdi:radio-tower')
+
+    def test_network_entity_icon_updates_without_changing_identity(self):
+        ns=load_definitions('sensor.py',{'KeeneticModemSensor'},{
+            'CoordinatorEntity':CoordinatorBase,'KeeneticRouterCoordinator':object,'SensorEntity':SensorBase,
+            'modem_value':modem.modem_value,'is_modem':modem.is_modem,
+            'modem_network_icon':modem.modem_network_icon,'SIGNAL_METRICS':modem.SIGNAL_METRICS,
+        })
+        data=SimpleNamespace(show_interface={'UsbQmi0':dict(MODEM)},stat_interface={})
+        coordinator=SimpleNamespace(data=data,unique_id='test_full',device_info={},last_update_success=True)
+        entity=ns['KeeneticModemSensor'](coordinator,SimpleNamespace(key='modem_network',icon=None),'UsbQmi0')
+        unique_id=entity._attr_unique_id
+        for value,icon in [('4G','signal-4g'),('3G','signal-3g'),('5G','signal-5g'),(None,'signal-off')]:
+            data.show_interface['UsbQmi0']['mobile']=value
+            self.assertEqual(entity.icon,'mdi:'+icon)
+            self.assertEqual(entity.native_value,value)
+            self.assertEqual(entity._attr_unique_id,unique_id)
+        coordinator.last_update_success=False
+        self.assertEqual(entity.icon,'mdi:signal-off')
+
     def test_missing_values_are_not_shown_as_a_valid_zero_reading(self):
         for metric in modem.SIGNAL_METRICS:
             for value in (None,'',True,'nan','unknown'):
@@ -271,7 +304,7 @@ class ModemIconTest(unittest.TestCase):
         ns=load_definitions('sensor.py',{'KeeneticModemSensor'},{
             'CoordinatorEntity':CoordinatorBase,'KeeneticRouterCoordinator':object,'SensorEntity':SensorBase,
             'modem_value':modem.modem_value,'is_modem':modem.is_modem,
-            'modem_signal_icon':modem.modem_signal_icon,'SIGNAL_METRICS':modem.SIGNAL_METRICS,
+            'modem_network_icon':modem.modem_network_icon,'modem_signal_icon':modem.modem_signal_icon,'SIGNAL_METRICS':modem.SIGNAL_METRICS,
         })
         data=SimpleNamespace(show_interface={'UsbQmi0':dict(MODEM)},stat_interface={})
         coordinator=SimpleNamespace(data=data,unique_id='test_full',device_info={},last_update_success=True)
