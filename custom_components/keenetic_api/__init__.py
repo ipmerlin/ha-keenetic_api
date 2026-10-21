@@ -23,6 +23,7 @@ from homeassistant.helpers import aiohttp_client
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import device_registry as dr
 
+from .modem import duplicate_modem_entities
 from .services import async_setup_services, async_unload_services
 from .coordinator import (
     KeeneticRouterCoordinator,
@@ -90,6 +91,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await async_setup_services(hass)
 
     try:
+        remove_duplicate_modem_entities(hass, entry, coordinator_full)
         remove_entities_or_devices(hass, entry)
     except Exception as err:
         _LOGGER.error(f'remove_entities_or_devices - {err}')
@@ -170,3 +172,24 @@ def remove_entities_or_devices(hass, entry) -> None:
         elif not any(x in {x.entity_id for x in entity_conf} for x in {x.entity_id for x in entity_dev}):
             _LOGGER.debug(f"Update device, remove_config_entry_id: {device_entry}")
             device_registry.async_update_device(device_entry.id, remove_config_entry_id=entry.entry_id)
+
+
+@callback
+def remove_duplicate_modem_entities(hass, entry, coordinator):
+    """Remove only generated b4 duplicates when their original entity exists.
+
+    Preserve original entity IDs, configuration and recorded history. Never
+    remove extender modem metrics that have no legacy interface equivalent.
+    """
+    registry = er.async_get(hass)
+    for domain, original_unique_id, duplicate_unique_id in duplicate_modem_entities(
+        coordinator.unique_id, coordinator.data.show_interface, coordinator.router.request_interface,
+    ):
+        original_id = registry.async_get_entity_id(domain, DOMAIN, original_unique_id)
+        duplicate_id = registry.async_get_entity_id(domain, DOMAIN, duplicate_unique_id)
+        if original_id is None or duplicate_id is None:
+            continue
+        original = registry.async_get(original_id)
+        duplicate = registry.async_get(duplicate_id)
+        if original.config_entry_id == entry.entry_id and duplicate.config_entry_id == entry.entry_id:
+            registry.async_remove(duplicate_id)

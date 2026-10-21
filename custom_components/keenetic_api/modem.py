@@ -102,12 +102,14 @@ def modem_attributes(interface, interface_id):
     return result
 
 
-def discover_modem_metrics(interfaces, stats, seen, metrics):
+def discover_modem_metrics(interfaces, stats, seen, metrics, legacy_interfaces=()):
     """Discover newly attached modems and newly available optional metrics."""
     result = []
     for interface_id, row in modem_interfaces(interfaces).items():
         stat = stats.get(interface_id, {})
         for metric in metrics:
+            if interface_id in legacy_interfaces and metric in STAT_FIELDS | {"connected"}:
+                continue
             identity = (interface_id, metric)
             supported = metric in {"info", "connected"} or (
                 metric in STAT_FIELDS and metric in stat
@@ -116,3 +118,15 @@ def discover_modem_metrics(interfaces, stats, seen, metrics):
                 seen.add(identity)
                 result.append(identity)
     return result
+
+
+def duplicate_modem_entities(unique_id, interfaces, legacy_interfaces):
+    """Exact b4 identities superseded by pre-existing interface entities."""
+    for interface_id in modem_interfaces(interfaces):
+        if interface_id not in legacy_interfaces:
+            continue
+        for metric in sorted(STAT_FIELDS | {"connected"}):
+            domain = "binary_sensor" if metric == "connected" else "sensor"
+            old_key = "connected_to_interface" if metric == "connected" else metric
+            yield (domain, f"{unique_id}_{old_key}_{interface_id}",
+                   f"{unique_id}_modem_{metric}_{interface_id}")

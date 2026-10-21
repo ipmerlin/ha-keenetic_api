@@ -187,5 +187,63 @@ class ModemPollingTest(unittest.IsolatedAsyncioTestCase):
         router.api=AsyncMock(return_value={'error':'unsupported'})
         self.assertEqual(await router.show_stat_interface(['UsbQmi0']),{})
 
+class ModemDeduplicationTest(unittest.TestCase):
+    def test_controller_keeps_legacy_metrics_but_extender_keeps_new_ones(self):
+        interfaces={'MwsMobile10':dict(MODEM,type='MwsMobile'),'UsbQmi0':dict(MODEM)}
+        metrics=('info','operator','rssi','rxbytes','txbytes','rxspeed','txspeed','connected','roaming')
+        stats={key:dict(STATS) for key in interfaces}
+        new=modem.discover_modem_metrics(interfaces,stats,set(),metrics,{'MwsMobile10':'MTS 4G'})
+        for metric in ('rxbytes','txbytes','rxspeed','txspeed','connected'):
+            self.assertNotIn(('MwsMobile10',metric),new)
+            self.assertIn(('UsbQmi0',metric),new)
+        for metric in ('info','operator','rssi','roaming'):
+            self.assertIn(('MwsMobile10',metric),new)
+
+    def test_exact_duplicate_identities_only_for_legacy_modem_interfaces(self):
+        pairs=list(modem.duplicate_modem_entities('router_full',
+                   {'MwsMobile10':dict(MODEM,type='MwsMobile'),'UsbQmi0':MODEM,'Ethernet0':{'type':'Ethernet'}},
+                   {'MwsMobile10':'MTS','Ethernet0':'WAN'}))
+        self.assertEqual(len(pairs),5)
+        self.assertIn(('sensor','router_full_rxbytes_MwsMobile10','router_full_modem_rxbytes_MwsMobile10'),pairs)
+        self.assertIn(('binary_sensor','router_full_connected_to_interface_MwsMobile10','router_full_modem_connected_MwsMobile10'),pairs)
+        self.assertFalse(any('UsbQmi0' in value or 'Ethernet0' in value for pair in pairs for value in pair))
+
+    def test_registry_cleanup_preserves_originals_orphans_other_entries_and_extender(self):
+        rows={}
+        objects={}
+        def add(domain,key,entity_id,entry='entry'):
+            rows[(domain,'keenetic_api',key)]=entity_id
+            objects[entity_id]=SimpleNamespace(config_entry_id=entry,name='user customized')
+        add('sensor','router_full_rxbytes_MwsMobile10','sensor.original')
+        add('sensor','router_full_modem_rxbytes_MwsMobile10','sensor.duplicate')
+        add('sensor','router_full_modem_txbytes_MwsMobile10','sensor.orphan_without_original')
+        add('sensor','router_full_txspeed_MwsMobile10','sensor.foreign_original','other-entry')
+        add('sensor','router_full_modem_txspeed_MwsMobile10','sensor.local_new')
+        add('sensor','router_full_modem_info_MwsMobile10','sensor.model')
+        add('sensor','router_full_modem_rxbytes_UsbQmi0','sensor.extender_counter')
+        add('binary_sensor','router_full_connected_to_interface_MwsMobile10','binary_sensor.original')
+        add('binary_sensor','router_full_modem_connected_MwsMobile10','binary_sensor.duplicate')
+        removed=[]
+        def remove(entity_id):
+            removed.append(entity_id)
+            for key in list(rows):
+                if rows[key]==entity_id:
+                    del rows[key]
+        registry=SimpleNamespace(async_get_entity_id=lambda *key:rows.get(key),
+                                 async_get=objects.get,async_remove=remove)
+        ns=load_definitions('__init__.py',{'remove_duplicate_modem_entities'},{
+            'callback':lambda fn:fn,'er':SimpleNamespace(async_get=lambda hass:registry),
+            'DOMAIN':'keenetic_api','duplicate_modem_entities':modem.duplicate_modem_entities})
+        coordinator=SimpleNamespace(unique_id='router_full',data=SimpleNamespace(
+            show_interface={'MwsMobile10':dict(MODEM,type='MwsMobile'),'UsbQmi0':MODEM}),
+            router=SimpleNamespace(request_interface={'MwsMobile10':'MTS'}))
+        for _ in range(2):
+            ns['remove_duplicate_modem_entities'](object(),SimpleNamespace(entry_id='entry'),coordinator)
+        self.assertEqual(set(removed),{'sensor.duplicate','binary_sensor.duplicate'})
+        self.assertEqual(len(removed),2)
+        self.assertEqual(rows[('sensor','keenetic_api','router_full_rxbytes_MwsMobile10')],'sensor.original')
+        self.assertEqual(objects['sensor.original'].name,'user customized')
+
+
 if __name__=='__main__':
     unittest.main()

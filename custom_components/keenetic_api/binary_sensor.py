@@ -109,7 +109,7 @@ async def async_setup_entry(
     def discover_modems():
         new_metrics = discover_modem_metrics(
             coordinator.data.show_interface, coordinator.data.stat_interface, seen_modems,
-            ("connected", "roaming"),
+            ("connected", "roaming"), coordinator.router.request_interface,
         )
         if new_metrics:
             async_add_entities([
