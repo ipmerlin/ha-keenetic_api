@@ -115,15 +115,15 @@ async def get_api(hass: HomeAssistant, data: dict[str, Any]) -> Router:
             "cookie_jar": CookieJar(unsafe=True),
         }
     session = aiohttp_client.async_create_clientsession(hass, data[CONF_SSL], **kwargs)
-    client = Router(
-        session = session,
-        username=data.get(CONF_USERNAME, "admin"),
-        password=data.get(CONF_PASSWORD, ""),
-        access_token=data.get(CONF_ACCESS_TOKEN, ""),
-        host=data[CONF_HOST],
-        port=data[CONF_PORT],
-    )
     try:
+        client = Router(
+            session=session,
+            username=data.get(CONF_USERNAME, "admin"),
+            password=data.get(CONF_PASSWORD, ""),
+            access_token=data.get(CONF_ACCESS_TOKEN, ""),
+            host=data[CONF_HOST],
+            port=data[CONF_PORT],
+        )
         await client.async_setup_obj()
     except Exception:
         await session.close()

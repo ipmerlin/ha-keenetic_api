@@ -13,5 +13,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Run network-free unit tests
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - name: Install test dependencies
+        run: python3 -m pip install 'argon2-cffi>=25.1.0' 'aiohttp>=3.12.0'
+      - name: Run unit tests and local HTTP authentication tests
         run: python3 -B -m unittest discover -s tests -v

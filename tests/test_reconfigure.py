@@ -4,6 +4,7 @@ import ast
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
+import logging
 from unittest.mock import AsyncMock
 
 from test_token_transport import client
@@ -51,6 +52,9 @@ class ReconfigureTest(unittest.IsolatedAsyncioTestCase):
         ))
         self.namespace = {
             'CONF_ACCESS_TOKEN': 'access_token', 'get_api': self.api,
+            'CONF_USERNAME': 'username', 'CONF_PASSWORD': 'password',
+            '_LOGGER': logging.getLogger('test_reconfigure'),
+            'cv': SimpleNamespace(string=str),
             'RouterAuthError': client.RouterAuthError, 'ClientError': ConnectionError,
             'format_mac': lambda value: value,
             'vol': SimpleNamespace(Optional=lambda key, **kw: key, Schema=lambda data: data),
@@ -106,6 +110,12 @@ class ReconfigureTest(unittest.IsolatedAsyncioTestCase):
         result = await self.invoke({'access_token': 'new-token'})
         self.assertEqual(result['errors'], {'base': 'cannot_connect'})
         self.assertIsNone(self.flow.updated)
+
+    async def test_password_mode_can_be_selected_and_credentials_replaced(self):
+        await self.invoke({'username': 'ha', 'password': 'new-password', 'clear_access_token': True})
+        self.assertEqual(self.flow.updated['username'], 'ha')
+        self.assertEqual(self.flow.updated['password'], 'new-password')
+        self.assertEqual(self.flow.updated['access_token'], '')
 
 
 if __name__ == '__main__':

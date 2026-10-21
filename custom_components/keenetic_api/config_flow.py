@@ -208,8 +208,9 @@ class KeeneticConfigFlow(ConfigFlow, domain=DOMAIN):
 
                 title = f"{keen['vendor']} {keen['model']} {user_input['host']}"
 
-            except RouterAuthError:
-                errors['base'] = 'invalid_auth'
+            except RouterAuthError as err:
+                errors['base'] = err.code
+                _LOGGER.warning('Keenetic authentication failed (%s): %s', err.code, err)
             except (ClientError, TimeoutError):
                 errors['base'] = 'cannot_connect'
             except Exception:
@@ -240,6 +241,10 @@ class KeeneticConfigFlow(ConfigFlow, domain=DOMAIN):
         errors = {}
         if user_input is not None:
             data = dict(entry.data)
+            if user_input.get(CONF_USERNAME):
+                data[CONF_USERNAME] = user_input[CONF_USERNAME]
+            if user_input.get(CONF_PASSWORD):
+                data[CONF_PASSWORD] = user_input[CONF_PASSWORD]
             token = user_input.get(CONF_ACCESS_TOKEN, '').strip()
             if user_input.get('clear_access_token'):
                 data[CONF_ACCESS_TOKEN] = ''
@@ -248,8 +253,9 @@ class KeeneticConfigFlow(ConfigFlow, domain=DOMAIN):
             try:
                 router = await get_api(self.hass, data)
                 keen = await router.show_version()
-            except RouterAuthError:
-                errors['base'] = 'invalid_auth'
+            except RouterAuthError as err:
+                errors['base'] = err.code
+                _LOGGER.warning('Keenetic authentication failed (%s): %s', err.code, err)
             except (ClientError, TimeoutError):
                 errors['base'] = 'cannot_connect'
             except Exception:
@@ -264,6 +270,10 @@ class KeeneticConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id='reconfigure',
             data_schema=vol.Schema({
+                vol.Optional(CONF_USERNAME, default=entry.data.get(CONF_USERNAME, 'admin')): cv.string,
+                vol.Optional(CONF_PASSWORD, default=''): selector.TextSelector(
+                    selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
+                ),
                 vol.Optional(CONF_ACCESS_TOKEN, default=''): selector.TextSelector(
                     selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
                 ),

@@ -11,6 +11,9 @@ import aiofiles.os
 from pathlib import Path
 from dataclasses import dataclass
 from urllib.parse import urlsplit
+import re
+
+from .ndw4 import authenticate as authenticate_ndw4, NDW4CredentialsError, NDW4ProtocolError
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -113,6 +116,10 @@ LIST_INTERFACES_PUBLIC = [
 class RouterAuthError(Exception):
     """Router rejected authentication without disclosing credentials."""
 
+    def __init__(self, message, code='invalid_auth'):
+        super().__init__(message)
+        self.code = code
+
 
 class Router:
     def __init__(
@@ -131,8 +138,9 @@ class Router:
         self._username = username
         self._password = password
         self._access_token = access_token.strip()
+        self._auth_lock = asyncio.Lock()
         if any(ord(char) < 33 or ord(char) > 126 for char in self._access_token):
-            raise RouterAuthError("Access token contains invalid characters")
+            raise RouterAuthError("Access token contains invalid characters", 'token_invalid_format')
         self.request_interface = {}
 
         self._mac = ""
@@ -223,7 +231,7 @@ class Router:
         return True
 
 
-    async def reguest_api(self, method: str, endpoint: str, json: Mapping[str, Any] | None = None, headers: Mapping[str, str] | None = None):
+    async def reguest_api(self, method: str, endpoint: str, json: Mapping[str, Any] | None = None, headers: Mapping[str, str] | None = None, raw_response: bool = False):
         url = self.url_router + endpoint
         request_headers = dict(headers or {})
         request_headers.update(self._token_headers())
@@ -231,8 +239,13 @@ class Router:
             _LOGGER.debug('%s request - %s', self._mac, endpoint)
             async with self._session.request(method=method, url=url, json=json, headers=request_headers, allow_redirects=False) as res:
                 if self._access_token and res.status in (401, 403):
-                    raise RouterAuthError("Router rejected access token or its permissions")
-                if res.status == 200 and res.content_type == 'application/json':
+                    raise RouterAuthError(
+                        "Router rejected token authentication over HTTP",
+                        'token_rejected' if res.status == 401 else 'token_forbidden',
+                    )
+                if raw_response:
+                    result = res
+                elif res.status == 200 and res.content_type == 'application/json':
                     result = await res.json()
                 elif res.status == 200 and res.content_type == 'application/javascript':
                     result = await res.text()
@@ -254,20 +267,35 @@ class Router:
 
 
     async def auth(self):
+        async with self._auth_lock:
+            return await self._authenticate()
+
+    async def _authenticate(self):
         if self._access_token:
             version = await self.reguest_api("get", "/rci/show/version")
             if not isinstance(version, dict) or not version.get("model"):
-                raise RouterAuthError("Token authentication did not return router version data")
+                raise RouterAuthError("Token authentication did not return router version data", 'token_response_invalid')
             return True
-        response = await self.reguest_api("get", "/auth")
+        response = await self.reguest_api("get", "/auth", raw_response=True)
         if response.status == 401:
+            headers = response.headers
+            offers = headers.getall('WWW-Authenticate', []) if hasattr(headers, 'getall') else [headers.get('WWW-Authenticate', '')]
+            if any(re.search(r'(?:^|,)\s*x-ndw4-interactive(?:\s|,|$)', value, re.IGNORECASE) for value in offers):
+                async def request_phase(body):
+                    return await self.reguest_api('post', '/auth', json=body, raw_response=True)
+                try:
+                    return await authenticate_ndw4(request_phase, self._username, self._password)
+                except NDW4CredentialsError as err:
+                    raise RouterAuthError(str(err)) from None
+                except NDW4ProtocolError as err:
+                    raise RouterAuthError(str(err), 'auth_protocol_error') from None
             if not response.headers.get('X-NDM-Realm') or not response.headers.get('X-NDM-Challenge'):
                 raise RouterAuthError("Legacy password authentication unavailable; configure an access token")
             password = f"{self._username}:{response.headers['X-NDM-Realm']}:{self._password}"
             password = md5(password.encode("utf-8"))
             password = response.headers["X-NDM-Challenge"] + password.hexdigest()
             password = sha256(password.encode("utf-8")).hexdigest()
-            response = await self.reguest_api("post", "/auth", json={"login": self._username, "password": password})
+            response = await self.reguest_api("post", "/auth", json={"login": self._username, "password": password}, raw_response=True)
         if response.status != 200:
             raise RouterAuthError("Router rejected password authentication")
         return response.status == 200

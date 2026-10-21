@@ -15,11 +15,14 @@ COMPONENT = ROOT / 'custom_components' / 'keenetic_api' if (ROOT / 'custom_compo
 aiofiles = types.ModuleType('aiofiles')
 aiofiles_os = types.ModuleType('aiofiles.os')
 aiofiles.os = aiofiles_os
-spec = importlib.util.spec_from_file_location('router_under_test', COMPONENT / 'keenetic.py')
+package = types.ModuleType('router_test_package')
+package.__path__ = [str(COMPONENT)]
+spec = importlib.util.spec_from_file_location('router_test_package.keenetic', COMPONENT / 'keenetic.py')
 client = importlib.util.module_from_spec(spec)
 with patch.dict(sys.modules, {
     'aiohttp': types.ModuleType('aiohttp'), 'aiofiles': aiofiles,
-    'aiofiles.os': aiofiles_os, 'router_under_test': client,
+    'aiofiles.os': aiofiles_os, 'router_test_package': package,
+    'router_test_package.keenetic': client,
 }):
     spec.loader.exec_module(client)
 

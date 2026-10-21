@@ -2,7 +2,7 @@
   "config": {
     "abort": {
       "already_configured": "Устройство уже настроено!",
-      "reconfigure_successful": "Credentials updated. The integration has been reloaded.",
+      "reconfigure_successful": "Authentication updated. The integration has been reloaded.",
       "unique_id_mismatch": "A different router responded. Settings were not changed."
     },
     "step": {
@@ -16,21 +16,28 @@
           "scan_interval": "Интервал скарирования (секунд).",
           "access_token": "Access token"
         },
-        "description": "Enter the router address and an access token (KeeneticOS 5.2), or username and password. A token takes precedence over password authentication."
+        "description": "For network access, enter the router address, username and password. KeeneticOS 5.2 x-ndw4 is selected automatically. Tokens are optional; LAN token access has not been confirmed."
       },
       "reconfigure": {
-        "title": "Change access token",
-        "description": "Enter a replacement token. Leave blank to keep the current token. Select Clear saved token to return to the stored username and password. Changes are saved only after a successful connection to the same router.",
+        "title": "Change authentication",
+        "description": "For KeeneticOS 5.2 network access, use username and password. A blank password keeps the saved password. If a token was previously entered, select Clear saved token; otherwise it takes precedence. LAN token access may be unavailable. Changes are saved only after connecting to the same router.",
         "data": {
           "access_token": "Access token",
-          "clear_access_token": "Clear saved token"
+          "clear_access_token": "Clear saved token",
+          "username": "Username",
+          "password": "Password (blank keeps saved password)"
         }
       }
     },
     "error": {
       "invalid_auth": "The router rejected authentication. Check the token, its permissions, or username and password.",
       "cannot_connect": "Unable to connect to the router.",
-      "unknown": "Unexpected router response. Check the Home Assistant log."
+      "unknown": "Unexpected router response. Check the Home Assistant log.",
+      "token_rejected": "HTTP 401: the router web server did not accept the token. For network access, clear the saved token and use username/password.",
+      "token_forbidden": "HTTP 403: token access denied. Check permissions or clear the saved token and use username/password.",
+      "token_invalid_format": "The token contains invalid characters.",
+      "token_response_invalid": "The token probe did not return router version data. For network access, clear the saved token and use username/password.",
+      "auth_protocol_error": "The x-ndw4 exchange failed due to unexpected router data or parameters. See the log; this does not necessarily mean an incorrect password."
     }
   },
   "options": {

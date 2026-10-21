@@ -10,7 +10,8 @@
     "issue_tracker": "https://github.com/ipmerlin/ha-keenetic_api/issues",
     "requirements": [
         "pyqrcode>=1.2.1",
-        "pypng==0.20220715.0"
+        "pypng==0.20220715.0",
+        "argon2-cffi>=25.1.0"
     ],
-    "version": "1.2.5b2"
+    "version": "1.2.5b3"
 }
