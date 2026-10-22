@@ -34,6 +34,19 @@ def modem_interfaces(interfaces):
     return {key: row for key, row in interfaces.items() if is_modem(row)}
 
 
+def local_modem_interfaces(interfaces):
+    """SMS belongs to the physical modem host, never a Mesh proxy interface."""
+    result = {}
+    for key, row in modem_interfaces(interfaces).items():
+        traits = row.get("traits", ())
+        if (row.get("type") == "MwsMobile" or key.startswith("MwsMobile")
+                or isinstance(traits, (list, tuple)) and "MwsMobile" in traits
+                or boolean(row.get("plugged")) is False):
+            continue
+        result[key] = row
+    return result
+
+
 def number(value):
     """Keep real zeroes; reject empty, boolean, malformed and non-finite values."""
     if isinstance(value, bool):

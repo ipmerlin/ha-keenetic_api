@@ -16,6 +16,9 @@ ROOT = Path(__file__).resolve().parents[1] / 'custom_components/keenetic_api'
 spec = importlib.util.spec_from_file_location('sms_under_test', ROOT/'sms.py')
 sms = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(sms)
+modem_spec = importlib.util.spec_from_file_location('sms_modem_under_test', ROOT/'modem.py')
+modem = importlib.util.module_from_spec(modem_spec)
+modem_spec.loader.exec_module(modem)
 
 
 def payload(ident='nv-1', text='synthetic SMS', parts=1, total=1, read=False, timestamp='2026-10-21T10:00:00Z'):
@@ -162,13 +165,14 @@ def make_coordinator():
     hass=SimpleNamespace(data={},bus=SimpleNamespace(async_fire=lambda e,d:events.append((e,d))),services=Registry())
     entry=SimpleNamespace(entry_id='entry',unique_id='router',options={'sms_default_target':'+79990000000'})
     full=SimpleNamespace(last_update_success=True,data=SimpleNamespace(show_interface={'UsbQmi0':{'type':'UsbQmi'}}),device_info={},router=SimpleNamespace(api=AsyncMock(return_value=payload())))
-    ns=definitions('sms_coordinator.py',{'KeeneticSmsCoordinator'},{
+    ns=definitions('sms_coordinator.py',{'KeeneticSmsCoordinator','notify_description'},{
         'DataUpdateCoordinator':CoordinatorBase,'timedelta':timedelta,'_LOGGER':logging.getLogger(__name__),
         'DOMAIN':'keenetic_api','CONF_SMS_TARGET':'sms_default_target','SmsGateway':sms.SmsGateway,
         'SmsTracker':sms.SmsTracker,'SmsError':sms.SmsError,'ServiceValidationError':ValueError,
         'asyncio':asyncio,'callback':lambda fn:fn,'slugify':lambda v:v.lower(),
-        'modem_interfaces':lambda d:{k:v for k,v in d.items() if v['type'] in ('UsbQmi','UsbLte')},
+        'local_modem_interfaces':modem.local_modem_interfaces,
         'async_setup_component':AsyncMock(),'NOTIFY_SCHEMA':None,
+        'async_set_service_schema':lambda h,d,n,desc:h.data.setdefault('descriptions',{}).__setitem__((d,n),desc),
     })
     coordinator=ns['KeeneticSmsCoordinator'](hass,entry,full)
     return coordinator,events,services
@@ -180,7 +184,7 @@ class SmsRuntimeTest(unittest.IsolatedAsyncioTestCase):
         await c.async_request_refresh()
         self.assertEqual(events,[])
         self.assertEqual(c.supported,{'UsbQmi0'})
-        self.assertEqual(set(services),{('notify','keenetic_sms_router'),('notify','keenetic_sms_router_usbqmi0')})
+        self.assertEqual(set(services),{('notify','keenetic_sms_router_usbqmi0')})
         c.full.router.api.return_value=payload(ident='nv-2')
         result=await c.list_messages()
         self.assertEqual(len(events),1)
@@ -215,18 +219,17 @@ class SmsRuntimeTest(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ValueError):
             await bound(SimpleNamespace(data={'message':'x','data':{'interface':'UsbLte0'}}))
 
-    async def test_multiple_modems_require_explicit_interface(self):
+    async def test_multiple_local_modems_each_have_one_bound_action(self):
         c,_,services=make_coordinator();c.full.data.show_interface['UsbLte0']={'type':'UsbLte'}
         await c.async_request_refresh();c.gateway.send=AsyncMock()
-        legacy=services['notify','keenetic_sms_router']
-        with self.assertRaises(ValueError): await legacy(SimpleNamespace(data={'message':'test'}))
-        await legacy(SimpleNamespace(data={'message':'test','data':{'interface':'UsbLte0'}}))
-        c.gateway.send.assert_awaited_with('UsbLte0','+79990000000','test')
-        self.assertIn(('notify','keenetic_sms_router_usblte0'),services)
+        self.assertEqual(set(services),{('notify','keenetic_sms_router_usbqmi0'),('notify','keenetic_sms_router_usblte0')})
+        with self.assertRaises(ValueError): c.select_interface()
+        await services['notify','keenetic_sms_router_usblte0'](SimpleNamespace(data={'message':'test'}))
+        c.gateway.send.assert_awaited_once_with('UsbLte0','+79990000000','test')
 
     async def test_unload_removes_only_owned_notify_actions(self):
         c,_,services=make_coordinator();await c.async_request_refresh()
-        services['notify','other']=Mock();old=services['notify','keenetic_sms_router']
+        services['notify','other']=Mock();old=services['notify','keenetic_sms_router_usbqmi0']
         c.close();self.assertEqual(set(services),{('notify','other')})
         with self.assertRaises(ValueError): await old(SimpleNamespace(data={'message':'test'}))
         await c._register_notify();self.assertEqual(len(services),1)
@@ -296,15 +299,81 @@ class SmsLifecycleTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_notify_name_collision_does_not_overwrite_other_action(self):
         c,_,services=make_coordinator();foreign=Mock()
-        services['notify','keenetic_sms_router']=foreign
+        services['notify','keenetic_sms_router_usbqmi0']=foreign
         await c.async_request_refresh()
-        self.assertIs(services['notify','keenetic_sms_router'],foreign)
-        c.close();self.assertIs(services['notify','keenetic_sms_router'],foreign)
+        self.assertIs(services['notify','keenetic_sms_router_usbqmi0'],foreign)
+        c.close();self.assertIs(services['notify','keenetic_sms_router_usbqmi0'],foreign)
 
     async def test_failed_router_snapshot_stops_sms_polling(self):
         c,_,_=make_coordinator();c.full.last_update_success=False
         await c.async_request_refresh();c.full.router.api.assert_not_awaited()
         self.assertEqual(c.available_interfaces,set())
+
+
+class LocalSmsOwnershipTest(unittest.IsolatedAsyncioTestCase):
+    async def test_controller_proxy_is_not_polled_and_creates_no_actions(self):
+        c,events,services=make_coordinator()
+        c.full.data.show_interface={'MwsMobile10':{'type':'MwsMobile','traits':['Mobile']}}
+        await c.async_request_refresh()
+        c.full.router.api.assert_not_awaited()
+        self.assertEqual(c.supported,set());self.assertEqual(events,[]);self.assertEqual(services,{})
+        with self.assertRaises(ValueError): await c.send('test',interface='MwsMobile10')
+
+    async def test_local_and_remote_on_same_router_create_only_local_action(self):
+        c,_,services=make_coordinator()
+        c.full.data.show_interface['MwsMobile10']={'type':'MwsMobile','traits':['Mobile']}
+        await c.async_request_refresh()
+        self.assertEqual(set(services),{('notify','keenetic_sms_router_usbqmi0')})
+        self.assertEqual(c.supported,{'UsbQmi0'})
+        self.assertEqual(c.full.router.api.await_count,1)
+
+    async def test_remote_and_unplugged_variants_are_excluded(self):
+        for interface,row in [('MwsMobile10',{'type':'Mobile'}),('Proxy0',{'type':'Mobile','traits':['MwsMobile']}),('UsbQmi0',{'type':'UsbQmi','plugged':'no'})]:
+            c,_,services=make_coordinator();c.full.data.show_interface={interface:row}
+            await c.async_request_refresh();c.full.router.api.assert_not_awaited()
+            self.assertEqual(services,{})
+
+    async def test_disappearing_modem_removes_only_its_action(self):
+        c,_,services=make_coordinator();await c.async_request_refresh()
+        old=services['notify','keenetic_sms_router_usbqmi0']
+        services['notify','other']=Mock()
+        c.full.data.show_interface={}
+        await c.async_request_refresh()
+        self.assertEqual(set(services),{('notify','other')})
+        with self.assertRaises(ValueError): await old(SimpleNamespace(data={'message':'test'}))
+
+    async def test_interface_changed_to_proxy_is_no_longer_allowed(self):
+        c,_,services=make_coordinator();await c.async_request_refresh()
+        c.full.data.show_interface['UsbQmi0']={'type':'MwsMobile'}
+        await c.async_request_refresh()
+        self.assertEqual(services,{})
+        with self.assertRaises(ValueError): await c.list_messages('UsbQmi0')
+        with self.assertRaises(ValueError): await c.mark_read('nv-1','UsbQmi0')
+
+
+class SmsNotifyFormTest(unittest.IsolatedAsyncioTestCase):
+    async def test_form_has_required_multiline_message_and_optional_phone(self):
+        c,_,services=make_coordinator();await c.async_request_refresh()
+        name=('notify','keenetic_sms_router_usbqmi0')
+        description=c.hass.data['descriptions'][name]
+        self.assertEqual(set(description['fields']),{'message','target'})
+        self.assertTrue(description['fields']['message']['required'])
+        self.assertEqual(description['fields']['message']['selector'],{'text':{'multiline':True}})
+        self.assertFalse(description['fields']['target']['required'])
+        self.assertEqual(description['fields']['target']['selector'],{'text':{}})
+        c.gateway.send=AsyncMock()
+        await services[name](SimpleNamespace(data={'message':'Текст из формы','target':'+79990000001'}))
+        c.gateway.send.assert_awaited_once_with('UsbQmi0','+79990000001','Текст из формы')
+
+    async def test_each_local_modem_has_its_own_form(self):
+        c,_,services=make_coordinator();c.full.data.show_interface['UsbLte0']={'type':'UsbLte'}
+        c.full.data.show_interface['MwsMobile10']={'type':'MwsMobile'}
+        await c.async_request_refresh()
+        descriptions=c.hass.data['descriptions']
+        self.assertEqual(set(descriptions),set(services))
+        self.assertEqual(len(descriptions),2)
+        self.assertIn('UsbQmi0',descriptions['notify','keenetic_sms_router_usbqmi0']['name'])
+        self.assertIn('UsbLte0',descriptions['notify','keenetic_sms_router_usblte0']['name'])
 
 
 if __name__ == '__main__':

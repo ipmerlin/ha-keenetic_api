@@ -16,5 +16,5 @@
         "pypng==0.20220715.0",
         "argon2-cffi>=25.1.0"
     ],
-    "version": "1.4b1"
+    "version": "1.4b2"
 }

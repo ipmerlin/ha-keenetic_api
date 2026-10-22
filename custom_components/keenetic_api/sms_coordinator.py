@@ -8,11 +8,12 @@ from homeassistant.core import callback
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.helpers.service import async_set_service_schema
 from homeassistant.setup import async_setup_component
 from homeassistant.util import slugify
 
 from .const import DOMAIN
-from .modem import modem_interfaces
+from .modem import local_modem_interfaces
 from .sms import SmsError, SmsGateway, SmsTracker
 
 SMS_COORDINATOR = "sms_coordinator"
@@ -24,6 +25,26 @@ NOTIFY_SCHEMA = vol.Schema({
     vol.Optional("title"): cv.string,
     vol.Optional("data", default={}): dict,
 })
+
+
+def notify_description(interface):
+    """Describe dynamic notify actions so HA renders their input form."""
+    return {
+        "name": f"Отправить SMS через {interface}",
+        "description": "Отправить SMS с физически подключённого модема. При тайм-ауте автоматического повтора нет.",
+        "fields": {
+            "message": {
+                "name": "Текст SMS", "required": True,
+                "description": "Сообщение получателю.",
+                "selector": {"text": {"multiline": True}},
+            },
+            "target": {
+                "name": "Номер получателя", "required": False,
+                "description": "Например, +79990000000. Если не указан, используется номер из настроек интеграции.",
+                "example": "+79990000000", "selector": {"text": {}},
+            },
+        },
+    }
 
 
 class KeeneticSmsCoordinator(DataUpdateCoordinator):
@@ -64,7 +85,8 @@ class KeeneticSmsCoordinator(DataUpdateCoordinator):
         if not self.full.last_update_success:
             self.available_interfaces = available
             return data
-        candidates = modem_interfaces(self.full.data.show_interface)
+        candidates = local_modem_interfaces(self.full.data.show_interface)
+        self.supported.intersection_update(candidates)
         for interface in candidates:
             try:
                 messages = await self._read(interface)
@@ -75,12 +97,12 @@ class KeeneticSmsCoordinator(DataUpdateCoordinator):
             available.add(interface)
             self.supported.add(interface)
         self.available_interfaces = available
-        if self.supported and not self.closed:
+        if (self.supported or self.notify_names) and not self.closed:
             await self._register_notify()
         return data
 
     def select_interface(self, interface=None):
-        current = self.supported & set(modem_interfaces(self.full.data.show_interface))
+        current = self.supported & set(local_modem_interfaces(self.full.data.show_interface))
         if interface is None:
             if len(current) != 1:
                 raise ServiceValidationError("Specify interface: expected exactly one SMS modem")
@@ -135,8 +157,14 @@ class KeeneticSmsCoordinator(DataUpdateCoordinator):
             return
         prefix = f"keenetic_sms_{slugify(self.entry.unique_id or self.entry.entry_id)}"
         owners = self.hass.data.setdefault(f"{DOMAIN}_sms_notify_owners", {})
-        for interface in [None, *sorted(self.supported)]:
-            name = prefix if interface is None else f"{prefix}_{slugify(interface)}"
+        current = self.supported & set(local_modem_interfaces(self.full.data.show_interface))
+        desired = {f"{prefix}_{slugify(interface)}": interface for interface in sorted(current)}
+        for name in self.notify_names - desired.keys():
+            if owners.get(name) is self:
+                self.hass.services.async_remove("notify", name)
+                owners.pop(name, None)
+        self.notify_names.intersection_update(desired)
+        for name, interface in desired.items():
             if name in self.notify_names:
                 continue
             if self.hass.services.has_service("notify", name):
@@ -148,11 +176,12 @@ class KeeneticSmsCoordinator(DataUpdateCoordinator):
                 if self.closed:
                     raise ServiceValidationError("Keenetic SMS integration is unloaded")
                 selected = call.data.get("data", {}).get("interface")
-                if bound is not None and selected not in (None, bound):
+                if selected not in (None, bound):
                     raise ServiceValidationError("This action is bound to another SMS interface")
-                await self.send(call.data["message"], call.data.get("target"), bound or selected)
+                await self.send(call.data["message"], call.data.get("target"), bound)
 
             self.hass.services.async_register("notify", name, notify, schema=NOTIFY_SCHEMA)
+            async_set_service_schema(self.hass, "notify", name, notify_description(interface))
             self.notify_names.add(name)
             owners[name] = self
 
